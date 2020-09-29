@@ -3,6 +3,7 @@
 #include <errno.h>
 #include <string.h>
 
+#include <AL/al.h>
 #include <AL/alc.h>
 
 #include "molang.h"
@@ -46,6 +47,15 @@ static ErlDrvData audio_erl_drv_start(ErlDrvPort port, char *buffer __attribute_
     L("OpenAL default device specifier: %s\r\n", alcGetString(alc_device, ALC_DEFAULT_DEVICE_SPECIFIER));
     L("OpenAL device specifier: %s\r\n", alcGetString(alc_device, ALC_DEVICE_SPECIFIER));
     L("OpenAL extensions: %s\r\n", alcGetString(alc_device, ALC_EXTENSIONS));
+
+    /*
+     * When an OpenAL error occurs, the error state is set and will not be changed until the error state
+     * is retrieved using alGetError.  Whenever alGetError is called, the error state is cleared and the
+     * last state (the current state when the call was made) is returned.  To isolate error detection to
+     * a specific portion of code, alGetError should be called before the isolated section to clear the
+     * current error state.
+     */
+    alGetError();
 
     return (ErlDrvData) data;
 }
@@ -141,6 +151,19 @@ static void audio_erl_drv_output(ErlDrvData data, char *buffer, ErlDrvSizeT leng
             molang_audio_emitter_stop(emitter_handler);
         }
             break;
+        case MOLANG_AUDIO_ERL_DRV_EMITTER_LOOPING_FN:
+        {
+            EI_ULONGLONG emitter_handler = 0;
+            ei_decode_version(buffer, &index, NULL);
+            ei_decode_ulonglong(buffer, &index, &emitter_handler);
+
+            int boolean;
+            ei_decode_version(buffer, &index, NULL);
+            ei_decode_boolean(buffer, &index, &boolean);
+
+            molang_audio_emitter_looping(emitter_handler, boolean);
+        }
+            break;
         case MOLANG_AUDIO_ERL_DRV_EMITTER_POSITION_FN:
         {
             EI_ULONGLONG emitter_handler = 0;
@@ -216,6 +239,19 @@ static void audio_erl_drv_output(ErlDrvData data, char *buffer, ErlDrvSizeT leng
             ei_decode_double(buffer, &index, &y);
 
             molang_audio_listener_velocity(x, y);
+        }
+            break;
+        case MOLANG_AUDIO_ERL_DRV_LISTENER_ORIENTATION_FN:
+        {
+            double x = 0;
+            ei_decode_version(buffer, &index, NULL);
+            ei_decode_double(buffer, &index, &x);
+
+            double y = 0;
+            ei_decode_version(buffer, &index, NULL);
+            ei_decode_double(buffer, &index, &y);
+
+            molang_audio_listener_orientation(x, y);
         }
             break;
         default:

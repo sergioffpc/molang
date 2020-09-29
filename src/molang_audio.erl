@@ -8,10 +8,10 @@
 -export([create_buffer/1, destroy_buffer/1]).
 -export([create_emitter/1, destroy_emitter/1]).
 
--export([play/1, stop/1]).
+-export([play/1, pause/1, stop/1, looping/2]).
 
 -export([set_emitter_position/3, set_emitter_velocity/3, set_emitter_direction/3]).
--export([set_listener_position/2, set_listener_velocity/2]).
+-export([set_listener_position/2, set_listener_velocity/2, set_listener_orientation/2]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
@@ -39,11 +39,13 @@ start_link() ->
   end,
   gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
 
+%% @doc A buffer can be filled with audio data, and can then be attached to an emitter.
 create_buffer(Filename) ->
   gen_server:call(?SERVER, {create_buffer, Filename}).
 destroy_buffer(Buffer) ->
   gen_server:cast(?SERVER, {destroy_buffer, Buffer}).
 
+%% @doc The emitter can then be positioned and played.
 create_emitter(Buffer) ->
   gen_server:call(?SERVER, {create_emitter, Buffer}).
 destroy_emitter(Emitter) ->
@@ -51,8 +53,12 @@ destroy_emitter(Emitter) ->
 
 play(Emitter) ->
   gen_server:cast(?SERVER, {play, Emitter}).
+pause(Emitter) ->
+  gen_server:cast(?SERVER, {pause, Emitter}).
 stop(Emitter) ->
   gen_server:cast(?SERVER, {stop, Emitter}).
+looping(Emitter, Looping) ->
+  gen_server:cast(?SERVER, {looping, Emitter, Looping}).
 
 set_emitter_position(Emitter, X, Y) ->
   gen_server:cast(?SERVER, {set_emitter_position, Emitter, X, Y}).
@@ -61,10 +67,14 @@ set_emitter_velocity(Emitter, X, Y) ->
 set_emitter_direction(Emitter, X, Y) ->
   gen_server:cast(?SERVER, {set_emitter_direction, Emitter, X, Y}).
 
+%% @doc How the source is heard is determined by its position and orientation relative
+%% to the listener object (there is only one listener).
 set_listener_position(X, Y) ->
   gen_server:cast(?SERVER, {set_listener_position, X, Y}).
 set_listener_velocity(X, Y) ->
   gen_server:cast(?SERVER, {set_listener_velocity, X, Y}).
+set_listener_orientation(X, Y) ->
+  gen_server:cast(?SERVER, {set_listener_orientation, X, Y}).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -112,18 +122,24 @@ handle_cast({destroy_emitter, Emitter}, State = #molang_audio_state{port = Port}
 handle_cast({play, Emitter}, State = #molang_audio_state{port = Port}) ->
   erlang:port_command(Port, [erlang:term_to_binary(16#12), erlang:term_to_binary(Emitter)]),
   {noreply, State};
-handle_cast({stop, Emitter}, State = #molang_audio_state{port = Port}) ->
+handle_cast({pause, Emitter}, State = #molang_audio_state{port = Port}) ->
   erlang:port_command(Port, [erlang:term_to_binary(16#13), erlang:term_to_binary(Emitter)]),
+  {noreply, State};
+handle_cast({stop, Emitter}, State = #molang_audio_state{port = Port}) ->
+  erlang:port_command(Port, [erlang:term_to_binary(16#14), erlang:term_to_binary(Emitter)]),
+  {noreply, State};
+handle_cast({looping, Emitter, Looping}, State = #molang_audio_state{port = Port}) ->
+  erlang:port_command(Port, [erlang:term_to_binary(16#15), erlang:term_to_binary(Emitter), erlang:term_to_binary(Looping)]),
   {noreply, State};
 
 handle_cast({set_emitter_position, Emitter, X, Y}, State = #molang_audio_state{port = Port}) ->
-  erlang:port_command(Port, [erlang:term_to_binary(16#14), erlang:term_to_binary(Emitter), erlang:term_to_binary(X), erlang:term_to_binary(Y)]),
+  erlang:port_command(Port, [erlang:term_to_binary(16#16), erlang:term_to_binary(Emitter), erlang:term_to_binary(X), erlang:term_to_binary(Y)]),
   {noreply, State};
 handle_cast({set_emitter_velocity, Emitter, X, Y}, State = #molang_audio_state{port = Port}) ->
-  erlang:port_command(Port, [erlang:term_to_binary(16#15), erlang:term_to_binary(Emitter), erlang:term_to_binary(X), erlang:term_to_binary(Y)]),
+  erlang:port_command(Port, [erlang:term_to_binary(16#17), erlang:term_to_binary(Emitter), erlang:term_to_binary(X), erlang:term_to_binary(Y)]),
   {noreply, State};
 handle_cast({set_emitter_direction, Emitter, X, Y}, State = #molang_audio_state{port = Port}) ->
-  erlang:port_command(Port, [erlang:term_to_binary(16#16), erlang:term_to_binary(Emitter), erlang:term_to_binary(X), erlang:term_to_binary(Y)]),
+  erlang:port_command(Port, [erlang:term_to_binary(16#18), erlang:term_to_binary(Emitter), erlang:term_to_binary(X), erlang:term_to_binary(Y)]),
   {noreply, State};
 
 handle_cast({set_listener_position, Emitter, X, Y}, State = #molang_audio_state{port = Port}) ->
@@ -131,6 +147,9 @@ handle_cast({set_listener_position, Emitter, X, Y}, State = #molang_audio_state{
   {noreply, State};
 handle_cast({set_listener_velocity, Emitter, X, Y}, State = #molang_audio_state{port = Port}) ->
   erlang:port_command(Port, [erlang:term_to_binary(16#21), erlang:term_to_binary(Emitter), erlang:term_to_binary(X), erlang:term_to_binary(Y)]),
+  {noreply, State};
+handle_cast({set_listener_orientation, Emitter, X, Y}, State = #molang_audio_state{port = Port}) ->
+  erlang:port_command(Port, [erlang:term_to_binary(16#22), erlang:term_to_binary(Emitter), erlang:term_to_binary(X), erlang:term_to_binary(Y)]),
   {noreply, State}.
 
 %% @private
