@@ -5,7 +5,7 @@
 #include <string.h>
 
 #include <EGL/egl.h>
-#include <GLES2/gl2.h>
+#include <GLES3/gl3.h>
 #include <X11/Xlib.h>
 
 #include "molang.h"
@@ -68,8 +68,8 @@ static void *graphics_erl_drv_loop(void *arg)
         EGL_BLUE_SIZE,           8,
         EGL_ALPHA_SIZE,          8,
         EGL_COLOR_BUFFER_TYPE,  EGL_RGB_BUFFER,
-        EGL_CONFORMANT,         EGL_OPENGL_ES2_BIT,
-        EGL_RENDERABLE_TYPE,    EGL_OPENGL_ES2_BIT,
+        EGL_CONFORMANT,         EGL_OPENGL_ES3_BIT,
+        EGL_RENDERABLE_TYPE,    EGL_OPENGL_ES3_BIT,
         EGL_SURFACE_TYPE,       EGL_WINDOW_BIT,
         EGL_NONE,
     };
@@ -146,7 +146,7 @@ static void *graphics_erl_drv_loop(void *arg)
     eglBindAPI(EGL_OPENGL_ES_API);
 
     EGLint egl_context_attrs[] = {
-        EGL_CONTEXT_CLIENT_VERSION, 2,
+        EGL_CONTEXT_CLIENT_VERSION, 3,
         EGL_NONE
     };
 
@@ -161,6 +161,20 @@ static void *graphics_erl_drv_loop(void *arg)
     eglSwapInterval(egl_display, 1);
 
     glGetError();
+
+#ifndef NDEBUG
+    const GLubyte *gl_vendor = glGetString(GL_VENDOR);
+    const GLubyte *gl_renderer = glGetString(GL_RENDERER);
+    const GLubyte *gl_version = glGetString(GL_VERSION);
+    const GLubyte *gl_shading_language_version = glGetString(GL_SHADING_LANGUAGE_VERSION);
+    const GLubyte *gl_extensions = glGetString(GL_EXTENSIONS);
+
+    L("OpenGL ES vendor: %s\r\n", gl_vendor);
+    L("OpenGL ES renderer: %s\r\n", gl_renderer);
+    L("OpenGL ES version: %s\r\n", gl_version);
+    L("OpenGL ES shading language version: %s\r\n", gl_shading_language_version);
+    L("OpenGL ES extensions: %s\r\n", gl_extensions);
+#endif
 
     glClearColor(0, 0, 1, 0);
     glClearDepthf(1);
@@ -197,11 +211,14 @@ static void *graphics_erl_drv_loop(void *arg)
         struct timespec t1;
         clock_gettime(CLOCK_MONOTONIC, &t1);
         uint64_t frame_delta = ((t1.tv_sec - t0.tv_sec) * 1000000000 + (t1.tv_nsec - t0.tv_nsec)) / 1000000;
-        (void) frame_delta;
+
+#ifndef NDEBUG
+        if ((frame_count % 300) == 0) {
+            L("frame=%ld time=%ldms\r\n", frame_count, frame_delta);
+        }
+#endif
 
         frame_count++;
-
-        L("frame=%ld time=%ldms\r\n", frame_count, frame_delta);
     }
 
     eglMakeCurrent(egl_display, egl_surface, egl_surface, EGL_NO_CONTEXT);
