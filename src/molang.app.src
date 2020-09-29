@@ -1,0 +1,11 @@
+{application, molang, [
+  {description, "Molang RT 2D GE"},
+  {vsn, "0.0.1"},
+  {registered, []},
+  {applications, [
+    kernel,
+    stdlib
+  ]},
+  {mod, {molang, []}},
+  {env, []}
+]}.
