@@ -50,16 +50,10 @@ static void *graphics_erl_drv_loop(void *arg)
         abort();
     }
 
-#ifndef NDEBUG
-    const char *egl_client_apis = eglQueryString(egl_display, EGL_CLIENT_APIS);
-    const char *egl_vendor = eglQueryString(egl_display, EGL_VENDOR);
-    const char *egl_version = eglQueryString(egl_display, EGL_VERSION);
-
-    L("EGL client API names: %s\r\n", egl_client_apis);
-    L("EGL vendor: %s\r\n", egl_vendor);
-    L("EGL version: %s\r\n", egl_version);
-    L("EGL extensions: %s\r\n", egl_extensions);
-#endif
+    L("EGL client API names: %s\r\n", eglQueryString(egl_display, EGL_CLIENT_APIS));
+    L("EGL vendor: %s\r\n", eglQueryString(egl_display, EGL_VENDOR));
+    L("EGL version: %s\r\n", eglQueryString(egl_display, EGL_VERSION));
+    L("EGL extensions: %s\r\n", eglQueryString(egl_display, EGL_EXTENSIONS));
 
     EGLint egl_config_attrs[] = {
         EGL_BUFFER_SIZE,        32,
@@ -162,19 +156,11 @@ static void *graphics_erl_drv_loop(void *arg)
 
     glGetError();
 
-#ifndef NDEBUG
-    const GLubyte *gl_vendor = glGetString(GL_VENDOR);
-    const GLubyte *gl_renderer = glGetString(GL_RENDERER);
-    const GLubyte *gl_version = glGetString(GL_VERSION);
-    const GLubyte *gl_shading_language_version = glGetString(GL_SHADING_LANGUAGE_VERSION);
-    const GLubyte *gl_extensions = glGetString(GL_EXTENSIONS);
-
-    L("OpenGL ES vendor: %s\r\n", gl_vendor);
-    L("OpenGL ES renderer: %s\r\n", gl_renderer);
-    L("OpenGL ES version: %s\r\n", gl_version);
-    L("OpenGL ES shading language version: %s\r\n", gl_shading_language_version);
-    L("OpenGL ES extensions: %s\r\n", gl_extensions);
-#endif
+    L("OpenGL ES vendor: %s\r\n", glGetString(GL_VENDOR));
+    L("OpenGL ES renderer: %s\r\n", glGetString(GL_RENDERER));
+    L("OpenGL ES version: %s\r\n", glGetString(GL_VERSION));
+    L("OpenGL ES shading language version: %s\r\n", glGetString(GL_SHADING_LANGUAGE_VERSION));
+    L("OpenGL ES extensions: %s\r\n", glGetString(GL_EXTENSIONS));
 
     glClearColor(0, 0, 1, 0);
     glClearDepthf(1);
