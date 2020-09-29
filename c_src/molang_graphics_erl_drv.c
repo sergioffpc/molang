@@ -5,76 +5,19 @@
 #include <string.h>
 
 #include <EGL/egl.h>
+#include <GLES2/gl2.h>
 #include <X11/Xlib.h>
 
 #include "molang.h"
 
 typedef struct {
     ErlDrvPort   port;
-
     bool         is_running;
-
-    Display     *x11_display;
-    Window       x11_window;
 } graphics_erl_drv_data_t;
 
 static void *graphics_erl_drv_loop(void *arg)
 {
     graphics_erl_drv_data_t *data = (graphics_erl_drv_data_t *) arg;
-
-    EGLDisplay egl_display = eglGetCurrentDisplay();
-    EGLSurface egl_surface = eglGetCurrentSurface(EGL_DRAW);
-
-    uint64_t frame_count = 0;
-    while (data->is_running) {
-        struct timespec t0;
-        clock_gettime(CLOCK_MONOTONIC, &t0);
-
-        while (XPending(data->x11_display)) {
-            XEvent event;
-            XNextEvent(data->x11_display, &event);
-
-            switch (event.type) {
-                case KeyPress:
-                break;
-                case KeyRelease:
-                break;
-                case MotionNotify:
-                break;
-                case ButtonPress:
-                break;
-                case ButtonRelease:
-                break;
-            }
-        }
-
-        // draw
-
-        eglSwapBuffers(egl_display, egl_surface);
-
-        struct timespec t1;
-        clock_gettime(CLOCK_MONOTONIC, &t1);
-        uint64_t frame_delta = ((t1.tv_sec - t0.tv_sec) * 1000000000 + (t1.tv_nsec - t0.tv_nsec)) / 1000000;
-
-        frame_count++;
-
-        L("frame=%ld time=%ldms\r\n", frame_count, frame_delta);
-    }
-
-    return 0;
-}
-
-static ErlDrvData graphics_erl_drv_start(ErlDrvPort port, char *buffer __attribute__((unused)))
-{
-    /* PORT_CONTROL_FLAG_BINARY means data is returned as a binary.  */
-    set_port_control_flags(port, PORT_CONTROL_FLAG_BINARY);
-
-    graphics_erl_drv_data_t *data = (graphics_erl_drv_data_t *) driver_alloc(sizeof(graphics_erl_drv_data_t));
-    if (data == NULL) {
-        L("unable to allocate driver memory\r\n");
-        abort();
-    }
-    data->port = port;
 
     const char *egl_extensions = eglQueryString(EGL_NO_DISPLAY, EGL_EXTENSIONS);
     if (!egl_extensions) {
@@ -87,15 +30,16 @@ static ErlDrvData graphics_erl_drv_start(ErlDrvPort port, char *buffer __attribu
         abort();
     }
 
+    Display *x11_display;
     const char *x11_display_name = NULL;
-    data->x11_display = XOpenDisplay(x11_display_name);
-    if (data->x11_display == NULL) {
+    x11_display = XOpenDisplay(x11_display_name);
+    if (x11_display == NULL) {
         L("unable to open display: %s\r\n", x11_display_name);
         abort();
     }
 
     EGLDisplay egl_display;
-    egl_display = eglGetDisplay(data->x11_display);
+    egl_display = eglGetDisplay(x11_display);
     if (egl_display == EGL_NO_DISPLAY) {
         L("unable to get EGL display\r\n");
         abort();
@@ -123,10 +67,10 @@ static ErlDrvData graphics_erl_drv_start(ErlDrvPort port, char *buffer __attribu
         EGL_GREEN_SIZE,          8,
         EGL_BLUE_SIZE,           8,
         EGL_ALPHA_SIZE,          8,
-
+        EGL_COLOR_BUFFER_TYPE,  EGL_RGB_BUFFER,
+        EGL_CONFORMANT,         EGL_OPENGL_ES2_BIT,
         EGL_RENDERABLE_TYPE,    EGL_OPENGL_ES2_BIT,
         EGL_SURFACE_TYPE,       EGL_WINDOW_BIT,
-
         EGL_NONE,
     };
 
@@ -149,20 +93,20 @@ static ErlDrvData graphics_erl_drv_start(ErlDrvPort port, char *buffer __attribu
 
     XVisualInfo *x11_visual_info;
     int x11_visual_info_count;
-    x11_visual_info = XGetVisualInfo(data->x11_display, VisualIDMask, &x11_visual_info_template, &x11_visual_info_count);
+    x11_visual_info = XGetVisualInfo(x11_display, VisualIDMask, &x11_visual_info_template, &x11_visual_info_count);
     if (!x11_visual_info) {
         L("no visual structures match the template\r\n");
         abort();
     }
 
     Colormap x11_colormap;
-    x11_colormap = XCreateColormap(data->x11_display, RootWindow(data->x11_display, 0), x11_visual_info->visual, AllocNone);
+    x11_colormap = XCreateColormap(x11_display, RootWindow(x11_display, 0), x11_visual_info->visual, AllocNone);
     if (x11_colormap == None) {
         L("unable to create a colormap of the specified visual type\r\n");
         abort();
     }
 
-    const Window x11_root_window = DefaultRootWindow(data->x11_display);
+    const Window x11_root_window = DefaultRootWindow(x11_display);
     const int width = 1920;
     const int height = 1080;
 
@@ -174,8 +118,9 @@ static ErlDrvData graphics_erl_drv_start(ErlDrvPort port, char *buffer __attribu
     int x11_window_attrs_mask = 0;
     x11_window_attrs_mask = CWEventMask | CWColormap | CWBorderPixel;
 
-    data->x11_window = XCreateWindow(data->x11_display, x11_root_window, 0, 0, width, height,  0, x11_visual_info->depth, InputOutput, x11_visual_info->visual, x11_window_attrs_mask, &x11_window_attrs);
-    if (!data->x11_window) {
+    Window x11_window;
+    x11_window = XCreateWindow(x11_display, x11_root_window, 0, 0, width, height,  0, x11_visual_info->depth, InputOutput, x11_visual_info->visual, x11_window_attrs_mask, &x11_window_attrs);
+    if (!x11_window) {
         L("unable to create X11 window\r\n");
         abort();
     }
@@ -187,16 +132,18 @@ static ErlDrvData graphics_erl_drv_start(ErlDrvPort port, char *buffer __attribu
         .min_height = height,
         .max_height = height,
     };
-    XSetWMNormalHints(data->x11_display, data->x11_window, &x11_window_hints);
+    XSetWMNormalHints(x11_display, x11_window, &x11_window_hints);
 
-    XMapWindow(data->x11_display, data->x11_window);
+    XMapWindow(x11_display, x11_window);
 
     EGLSurface egl_surface;
-    egl_surface = eglCreateWindowSurface(egl_display, egl_config, data->x11_window, NULL);
+    egl_surface = eglCreateWindowSurface(egl_display, egl_config, x11_window, NULL);
     if (egl_surface == EGL_NO_SURFACE) {
         L("unable to create EGL window surface\r\n");
         abort();
     }
+
+    eglBindAPI(EGL_OPENGL_ES_API);
 
     EGLint egl_context_attrs[] = {
         EGL_CONTEXT_CLIENT_VERSION, 2,
@@ -213,7 +160,73 @@ static ErlDrvData graphics_erl_drv_start(ErlDrvPort port, char *buffer __attribu
     eglMakeCurrent(egl_display, egl_surface, egl_surface, egl_context);
     eglSwapInterval(egl_display, 1);
 
+    glGetError();
+
+    glClearColor(0, 0, 1, 0);
+    glClearDepthf(1);
+
+    uint64_t frame_count = 0;
+
     data->is_running = true;
+    while (data->is_running) {
+        struct timespec t0;
+        clock_gettime(CLOCK_MONOTONIC, &t0);
+
+        while (XPending(x11_display)) {
+            XEvent event;
+            XNextEvent(x11_display, &event);
+
+            switch (event.type) {
+                case KeyPress:
+                break;
+                case KeyRelease:
+                break;
+                case MotionNotify:
+                break;
+                case ButtonPress:
+                break;
+                case ButtonRelease:
+                break;
+            }
+        }
+
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+        eglSwapBuffers(egl_display, egl_surface);
+
+        struct timespec t1;
+        clock_gettime(CLOCK_MONOTONIC, &t1);
+        uint64_t frame_delta = ((t1.tv_sec - t0.tv_sec) * 1000000000 + (t1.tv_nsec - t0.tv_nsec)) / 1000000;
+        (void) frame_delta;
+
+        frame_count++;
+
+        L("frame=%ld time=%ldms\r\n", frame_count, frame_delta);
+    }
+
+    eglMakeCurrent(egl_display, egl_surface, egl_surface, EGL_NO_CONTEXT);
+
+    eglDestroySurface(egl_display, egl_surface);
+    eglDestroyContext(egl_display, egl_context);
+    eglTerminate(egl_display);
+
+    XDestroyWindow(x11_display, x11_window);
+    XCloseDisplay(x11_display);
+
+    return 0;
+}
+
+static ErlDrvData graphics_erl_drv_start(ErlDrvPort port, char *buffer __attribute__((unused)))
+{
+    /* PORT_CONTROL_FLAG_BINARY means data is returned as a binary.  */
+    set_port_control_flags(port, PORT_CONTROL_FLAG_BINARY);
+
+    graphics_erl_drv_data_t *data = (graphics_erl_drv_data_t *) driver_alloc(sizeof(graphics_erl_drv_data_t));
+    if (data == NULL) {
+        L("unable to allocate driver memory\r\n");
+        abort();
+    }
+    data->port = port;
 
     pthread_t thread;
     switch (pthread_create(&thread, NULL, graphics_erl_drv_loop, data)) {
@@ -233,22 +246,7 @@ static ErlDrvData graphics_erl_drv_start(ErlDrvPort port, char *buffer __attribu
 
 static void graphics_erl_drv_stop(ErlDrvData data)
 {
-    graphics_erl_drv_data_t *data_ptr = (graphics_erl_drv_data_t *) data;
-
-    data_ptr->is_running = false;
-
-    EGLDisplay egl_display = eglGetCurrentDisplay();
-    EGLSurface egl_surface = eglGetCurrentSurface(EGL_DRAW);
-    EGLContext egl_context = eglGetCurrentContext();
-
-    eglMakeCurrent(egl_display, egl_surface, egl_surface, EGL_NO_CONTEXT);
-
-    eglDestroySurface(egl_display, egl_surface);
-    eglDestroyContext(egl_display, egl_context);
-    eglTerminate(egl_display);
-
-    XDestroyWindow(data_ptr->x11_display, data_ptr->x11_window);
-    XCloseDisplay(data_ptr->x11_display);
+    ((graphics_erl_drv_data_t *) data)->is_running = false;
 
     driver_free((char *) data);
 }

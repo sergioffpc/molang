@@ -33,7 +33,7 @@ molang_audio.so: $(C_SRC_DIR)/molang.h $(C_SRC_DIR)/molang_audio.c $(C_SRC_DIR)/
 
 molang_graphics.so: $(C_SRC_DIR)/molang.h $(C_SRC_DIR)/molang_graphics.c $(C_SRC_DIR)/molang_graphics_erl_drv.c
 	$(CC) $(CFLAGS) $(CPPFLAGS) -Wl,--whole-archive -lei -Wl,--no-whole-archive -o $(BUILD_DIR)/$@ $^ $(LDFLAGS) $(LDLIBS) \
-		$(shell pkg-config --libs egl gl libpng x11)
+		$(shell pkg-config --libs egl glesv2 libpng x11)
 
 .PHONY: clean
 clean:
