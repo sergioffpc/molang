@@ -165,13 +165,16 @@ static void *graphics_erl_drv_loop(void *arg)
     glClearColor(0, 0, 1, 0);
     glClearDepthf(1);
 
+#ifndef NDEBUG
+    struct timespec t0;
+    clock_gettime(CLOCK_MONOTONIC, &t0);
+
+    uint64_t f0 = 0;
+#endif
     uint64_t frame_count = 0;
 
     data->is_running = true;
     while (data->is_running) {
-        struct timespec t0;
-        clock_gettime(CLOCK_MONOTONIC, &t0);
-
         while (XPending(x11_display)) {
             XEvent event;
             XNextEvent(x11_display, &event);
@@ -190,17 +193,20 @@ static void *graphics_erl_drv_loop(void *arg)
             }
         }
 
-        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+        molang_graphics_draw();
 
         eglSwapBuffers(egl_display, egl_surface);
 
-        struct timespec t1;
-        clock_gettime(CLOCK_MONOTONIC, &t1);
-        uint64_t frame_delta = ((t1.tv_sec - t0.tv_sec) * 1000000000 + (t1.tv_nsec - t0.tv_nsec)) / 1000000;
-
 #ifndef NDEBUG
-        if ((frame_count % 300) == 0) {
-            L("frame=%ld time=%ldms\r\n", frame_count, frame_delta);
+        if (++f0 == 300) {
+            struct timespec t1;
+            clock_gettime(CLOCK_MONOTONIC, &t1);
+            uint64_t frame_delta = ((t1.tv_sec - t0.tv_sec) * 1000000000 + (t1.tv_nsec - t0.tv_nsec)) / 1000000;
+
+            L("frame=%ld avg_time=%ldms\r\n", frame_count, frame_delta / f0);
+
+            clock_gettime(CLOCK_MONOTONIC, &t0);
+            f0 = 0;
         }
 #endif
 
@@ -262,22 +268,30 @@ static void graphics_erl_drv_output(ErlDrvData data, char *buffer, ErlDrvSizeT l
     ei_decode_version(buffer, &index, NULL);
     ei_decode_ulonglong(buffer, &index, &fn);
     switch (fn) {
-        case GRAPHICS_ERL_DRV_TEXTURE_BUFFER_CREATE_FN:
+        case GRAPHICS_ERL_DRV_IMAGE_CREATE_FN:
         {
             char filename[255];
             ei_decode_version(buffer, &index, NULL);
             ei_decode_string(buffer, &index, filename);
 
-            uint32_t buffer_handler = 0;
+            uint32_t image_handler = molang_graphics_image_create(filename);
 
             ei_x_buff x;
             ei_x_new_with_version(&x);
-            ei_x_encode_ulonglong(&x, buffer_handler);
+            ei_x_encode_ulonglong(&x, image_handler);
 
-            graphics_erl_drv_data_t *data_ptr = (graphics_erl_drv_data_t *) data;
-            driver_output(data_ptr->port, x.buff, x.index);
+            driver_output(((graphics_erl_drv_data_t *) data)->port, x.buff, x.index);
 
             ei_x_free(&x);
+        }
+            break;
+        case GRAPHICS_ERL_DRV_IMAGE_DESTROY_FN:
+        {
+            EI_ULONGLONG image_handler = 0;
+            ei_decode_version(buffer, &index, NULL);
+            ei_decode_ulonglong(buffer, &index, &image_handler);
+
+            molang_graphics_image_destroy(image_handler);
         }
             break;
         default:

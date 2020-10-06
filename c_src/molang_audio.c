@@ -7,6 +7,31 @@
 
 #include "molang.h"
 
+#ifndef NDEBUG
+static void al_error()
+{
+    switch (alGetError()) {
+        case AL_INVALID_NAME:
+            L("invalid name parameter\r\n");
+            abort();
+        case AL_INVALID_ENUM:
+            L("invalid parameter\r\n");
+            abort();
+        case AL_INVALID_VALUE:
+            L("invalid enum parameter value\r\n");
+            abort();
+        case AL_INVALID_OPERATION:
+            L("illegal call\r\n");
+            abort();
+        case AL_OUT_OF_MEMORY:
+            L("unable to allocate memory\r\n");
+            abort();
+    }
+}
+#else
+#define al_error()
+#endif
+
 typedef struct {
     uint8_t *data_buffer;
     size_t   data_size;
@@ -104,14 +129,7 @@ uint32_t molang_audio_buffer_create(const char *filename)
 
     ALuint buffer;
     alGenBuffers(1, &buffer);
-    switch (alGetError()) {
-        case AL_INVALID_VALUE:
-            L("buffer array isn't large enough to hold the number of buffers\r\n");
-            abort();
-        case AL_OUT_OF_MEMORY:
-            L("not enough memory available to generate all the buffers\r\n");
-            abort();
-    }
+    al_error();
 
     ALenum format;
     if (client_data.channels == 1 && client_data.bits_per_sample == 8) {
@@ -143,17 +161,7 @@ uint32_t molang_audio_buffer_create(const char *filename)
      * output level of zero.  Stereo data is expressed in interleaved format, left channel first.
      */
     alBufferData(buffer, format, client_data.data_buffer, client_data.data_size, client_data.sample_rate);
-    switch (alGetError()) {
-        case AL_INVALID_VALUE:
-            L("size parameter is not valid for the format specified, the buffer is in use, or the data is a NULL pointer\r\n");
-            abort();
-        case AL_OUT_OF_MEMORY:
-            L("not enough memory available to create this buffer\r\n");
-            abort();
-        case AL_INVALID_ENUM:
-            L("format does not exist\r\n");
-            abort();
-    }
+    al_error();
 
     free(client_data.data_buffer);
 
@@ -164,50 +172,17 @@ void molang_audio_buffer_destroy(uint32_t buffer_handler)
 {
     /* Buffers which are attached to a source can not be deleted.  */
     alDeleteBuffers(1, &buffer_handler);
-    switch (alGetError()) {
-        case AL_INVALID_OPERATION:
-            L("buffer is still in use and can not be deleted\r\n");
-            abort();
-        case AL_INVALID_NAME:
-            L("buffer name is invalid\r\n");
-            abort();
-        case AL_INVALID_VALUE:
-            L("requested number of buffers can not be deleted\r\n");
-            abort();
-    }
+    al_error();
 }
 
 uint32_t molang_audio_emitter_create(uint32_t buffer_handler)
 {
     ALuint source;
     alGenSources(1, &source);
-    switch (alGetError()) {
-        case AL_OUT_OF_MEMORY:
-            L("not enough memory to generate all the requested sources\r\n");
-            abort();
-        case AL_INVALID_VALUE:
-            L("not enough non-memory resources to create all the requested sources, or the array pointer is not valid\r\n");
-            abort();
-        case AL_INVALID_OPERATION:
-            L("no context to create sources in\r\n");
-            abort();
-    }
+    al_error();
 
     alSourcei(source, AL_BUFFER, buffer_handler);
-    switch (alGetError()) {
-        case AL_INVALID_VALUE:
-            L("value given is out of range\r\n");
-            abort();
-        case AL_INVALID_ENUM:
-            L("specified parameter is not valid\r\n");
-            abort();
-        case AL_INVALID_NAME:
-            L("specified source name is not valid\r\n");
-            abort();
-        case AL_INVALID_OPERATION:
-            L("no current context\r\n");
-            abort();
-    }
+    al_error();
 
     return source;
 }
@@ -221,14 +196,7 @@ void molang_audio_emitter_destroy(uint32_t emitter_handler)
     alSourcei(emitter_handler, AL_BUFFER, 0);
 
     alDeleteSources(1, &emitter_handler);
-    switch (alGetError()) {
-        case AL_INVALID_NAME:
-            L("specified source is not valid, or an attempt is being made to delete more sources than exist\r\n");
-            abort();
-        case AL_INVALID_OPERATION:
-            L("no current context\r\n");
-            abort();
-    }
+    al_error();
 }
 
 void molang_audio_emitter_play(uint32_t emitter_handler)
@@ -239,163 +207,60 @@ void molang_audio_emitter_play(uint32_t emitter_handler)
      * buffer(s) are done playing, the source will progress to the AL_STOPPED state.
      */
     alSourcePlay(emitter_handler);
-    switch (alGetError()) {
-        case AL_INVALID_NAME:
-            L("specified source is not valid\r\n");
-            abort();
-        case AL_INVALID_OPERATION:
-            L("no current context\r\n");
-            abort();
-    }
+    al_error();
 }
 
 void molang_audio_emitter_pause(uint32_t emitter_handler)
 {
     alSourcePause(emitter_handler);
-    switch (alGetError()) {
-        case AL_INVALID_NAME:
-            L("specified source is not valid\r\n");
-            abort();
-        case AL_INVALID_OPERATION:
-            L("no current context\r\n");
-            abort();
-    }
+    al_error();
 }
 
 void molang_audio_emitter_stop(uint32_t emitter_handler)
 {
     alSourceStop(emitter_handler);
-    switch (alGetError()) {
-        case AL_INVALID_NAME:
-            L("specified source is not valid\r\n");
-            abort();
-        case AL_INVALID_OPERATION:
-            L("no current context\r\n");
-            abort();
-    }
+    al_error();
 }
 
 void molang_audio_emitter_looping(uint32_t emitter_handler, bool looping)
 {
     alSourcei(emitter_handler, AL_LOOPING, looping);
-    switch (alGetError()) {
-        case AL_INVALID_VALUE:
-            L("value given is out of range\r\n");
-            abort();
-        case AL_INVALID_ENUM:
-            L("specified parameter is not valid\r\n");
-            abort();
-        case AL_INVALID_NAME:
-            L("specified source name is not valid\r\n");
-            abort();
-        case AL_INVALID_OPERATION:
-            L("no current context\r\n");
-            abort();
-    }
+    al_error();
 }
 
 void molang_audio_emitter_position(uint32_t emitter_handler, float x, float y)
 {
     alSource3f(emitter_handler, AL_POSITION, x, y, 0);
-    switch (alGetError()) {
-        case AL_INVALID_VALUE:
-            L("value given is out of range\r\n");
-            abort();
-        case AL_INVALID_ENUM:
-            L("specified parameter is not valid\r\n");
-            abort();
-        case AL_INVALID_NAME:
-            L("specified source name is not valid\r\n");
-            abort();
-        case AL_INVALID_OPERATION:
-            L("no current context\r\n");
-            abort();
-    }
+    al_error();
 }
 
 void molang_audio_emitter_velocity(uint32_t emitter_handler, float x, float y)
 {
     alSource3f(emitter_handler, AL_VELOCITY, x, y, 0);
-    switch (alGetError()) {
-        case AL_INVALID_VALUE:
-            L("value given is out of range\r\n");
-            abort();
-        case AL_INVALID_ENUM:
-            L("specified parameter is not valid\r\n");
-            abort();
-        case AL_INVALID_NAME:
-            L("specified source name is not valid\r\n");
-            abort();
-        case AL_INVALID_OPERATION:
-            L("no current context\r\n");
-            abort();
-    }
+    al_error();
 }
 
 void molang_audio_emitter_direction(uint32_t emitter_handler, float x, float y)
 {
     alSource3f(emitter_handler, AL_DIRECTION, x, y, 0);
-    switch (alGetError()) {
-        case AL_INVALID_VALUE:
-            L("value given is out of range\r\n");
-            abort();
-        case AL_INVALID_ENUM:
-            L("specified parameter is not valid\r\n");
-            abort();
-        case AL_INVALID_NAME:
-            L("specified source name is not valid\r\n");
-            abort();
-        case AL_INVALID_OPERATION:
-            L("no current context\r\n");
-            abort();
-    }
+    al_error();
 }
 
 void molang_audio_listener_position(float x, float y)
 {
     alListener3f(AL_POSITION, x, y, 0);
-    switch (alGetError()) {
-        case AL_INVALID_VALUE:
-            L("value given is not valid\r\n");
-            abort();
-        case AL_INVALID_ENUM:
-            L("specified parameter is not valid\r\n");
-            abort();
-        case AL_INVALID_OPERATION:
-            L("no current context\r\n");
-            abort();
-    }
+    al_error();
 }
 
 void molang_audio_listener_velocity(float x, float y)
 {
     alListener3f(AL_VELOCITY, x, y, 0);
-    switch (alGetError()) {
-        case AL_INVALID_VALUE:
-            L("value given is not valid\r\n");
-            abort();
-        case AL_INVALID_ENUM:
-            L("specified parameter is not valid\r\n");
-            abort();
-        case AL_INVALID_OPERATION:
-            L("no current context\r\n");
-            abort();
-    }
+    al_error();
 }
 
 void molang_audio_listener_orientation(float x, float y)
 {
     ALfloat orientation[] = {x, y, 0};
     alListenerfv(AL_ORIENTATION, orientation);
-    switch (alGetError()) {
-        case AL_INVALID_VALUE:
-            L("value given is not valid\r\n");
-            abort();
-        case AL_INVALID_ENUM:
-            L("specified parameter is not valid\r\n");
-            abort();
-        case AL_INVALID_OPERATION:
-            L("no current context\r\n");
-            abort();
-    }
+    al_error();
 }

@@ -7,7 +7,8 @@ BUILD_DIR := ebin
 
 CC := gcc
 CFLAGS := -pedantic-errors -Wall -Wextra -Werror
-CPPFLAGS := -I $(C_INCLUDE_DIR)/ -D LEVEL1_DCACHE_LINESIZE=$(shell getconf LEVEL1_DCACHE_LINESIZE) -D PAGE_SIZE=$(shell getconf PAGE_SIZE)
+CPPFLAGS := -I $(C_INCLUDE_DIR)/ -D LEVEL1_DCACHE_LINESIZE=$(shell getconf LEVEL1_DCACHE_LINESIZE) \
+	-D PAGE_SIZE=$(shell getconf PAGE_SIZE)
 LDFLAGS := -fpic -shared -pthread
 LDLIBS := -lrt
 
@@ -28,12 +29,13 @@ all: molang_audio.so molang_graphics.so
 	@cp $(ERL_SRC_DIR)/molang.app.src $(BUILD_DIR)/molang.app
 
 molang_audio.so: $(C_SRC_DIR)/molang.h $(C_SRC_DIR)/molang_audio.c $(C_SRC_DIR)/molang_audio_erl_drv.c
-	$(CC) $(CFLAGS) $(CPPFLAGS) -Wl,--whole-archive -lei -Wl,--no-whole-archive -o $(BUILD_DIR)/$@ $^ $(LDFLAGS) $(LDLIBS) \
-		$(shell pkg-config --libs openal flac)
+	$(CC) $(CFLAGS) $(CPPFLAGS) -Wl,--whole-archive -lei -Wl,--no-whole-archive -o $(BUILD_DIR)/$@ $^ $(LDFLAGS) \
+		$(LDLIBS) $(shell pkg-config --libs openal flac)
 
-molang_graphics.so: $(C_SRC_DIR)/molang.h $(C_SRC_DIR)/molang_graphics.c $(C_SRC_DIR)/molang_graphics_erl_drv.c
-	$(CC) $(CFLAGS) $(CPPFLAGS) -Wl,--whole-archive -lei -Wl,--no-whole-archive -o $(BUILD_DIR)/$@ $^ $(LDFLAGS) $(LDLIBS) \
-		$(shell pkg-config --libs egl glesv2 libpng x11)
+molang_graphics.so: $(C_SRC_DIR)/molang.h $(C_SRC_DIR)/molang_graphics.c $(C_SRC_DIR)/molang_graphics_erl_drv.c \
+	$(C_SRC_DIR)/molang_graphics_renderer.c
+	$(CC) $(CFLAGS) $(CPPFLAGS) -Wl,--whole-archive -lei -Wl,--no-whole-archive -o $(BUILD_DIR)/$@ $^ $(LDFLAGS) \
+		$(LDLIBS) $(shell pkg-config --libs egl glesv2 libpng x11)
 
 .PHONY: clean
 clean:

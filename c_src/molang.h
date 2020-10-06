@@ -53,6 +53,12 @@ extern void     molang_audio_listener_position      (float x, float y);
 extern void     molang_audio_listener_velocity      (float x, float y);
 extern void     molang_audio_listener_orientation   (float x, float y);
 
-#define GRAPHICS_ERL_DRV_TEXTURE_BUFFER_CREATE_FN   0x00
+#define GRAPHICS_ERL_DRV_IMAGE_CREATE_FN    0x00
+#define GRAPHICS_ERL_DRV_IMAGE_DESTROY_FN   0x01
+
+extern uint32_t molang_graphics_image_create    (const char *file_name);
+extern void     molang_graphics_image_destroy   (uint32_t image_handler);
+
+extern void     molang_graphics_draw    (void);
 
 #endif
