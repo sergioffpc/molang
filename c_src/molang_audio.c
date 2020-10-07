@@ -2,35 +2,9 @@
 #include <errno.h>
 #include <string.h>
 
-#include <AL/al.h>
 #include <FLAC/stream_decoder.h>
 
 #include "molang.h"
-
-#ifndef NDEBUG
-static void al_error()
-{
-    switch (alGetError()) {
-        case AL_INVALID_NAME:
-            L("invalid name parameter\r\n");
-            abort();
-        case AL_INVALID_ENUM:
-            L("invalid parameter\r\n");
-            abort();
-        case AL_INVALID_VALUE:
-            L("invalid enum parameter value\r\n");
-            abort();
-        case AL_INVALID_OPERATION:
-            L("illegal call\r\n");
-            abort();
-        case AL_OUT_OF_MEMORY:
-            L("unable to allocate memory\r\n");
-            abort();
-    }
-}
-#else
-#define al_error()
-#endif
 
 typedef struct {
     uint8_t *data_buffer;
@@ -129,7 +103,7 @@ uint32_t molang_audio_buffer_create(const char *filename)
 
     ALuint buffer;
     alGenBuffers(1, &buffer);
-    al_error();
+    MOLANG_AUDIO_LIBRARY_ERROR();
 
     ALenum format;
     if (client_data.channels == 1 && client_data.bits_per_sample == 8) {
@@ -161,7 +135,7 @@ uint32_t molang_audio_buffer_create(const char *filename)
      * output level of zero.  Stereo data is expressed in interleaved format, left channel first.
      */
     alBufferData(buffer, format, client_data.data_buffer, client_data.data_size, client_data.sample_rate);
-    al_error();
+    MOLANG_AUDIO_LIBRARY_ERROR();
 
     free(client_data.data_buffer);
 
@@ -172,17 +146,17 @@ void molang_audio_buffer_destroy(uint32_t buffer_handler)
 {
     /* Buffers which are attached to a source can not be deleted.  */
     alDeleteBuffers(1, &buffer_handler);
-    al_error();
+    MOLANG_AUDIO_LIBRARY_ERROR();
 }
 
 uint32_t molang_audio_emitter_create(uint32_t buffer_handler)
 {
     ALuint source;
     alGenSources(1, &source);
-    al_error();
+    MOLANG_AUDIO_LIBRARY_ERROR();
 
     alSourcei(source, AL_BUFFER, buffer_handler);
-    al_error();
+    MOLANG_AUDIO_LIBRARY_ERROR();
 
     return source;
 }
@@ -196,7 +170,7 @@ void molang_audio_emitter_destroy(uint32_t emitter_handler)
     alSourcei(emitter_handler, AL_BUFFER, 0);
 
     alDeleteSources(1, &emitter_handler);
-    al_error();
+    MOLANG_AUDIO_LIBRARY_ERROR();
 }
 
 void molang_audio_emitter_play(uint32_t emitter_handler)
@@ -207,60 +181,60 @@ void molang_audio_emitter_play(uint32_t emitter_handler)
      * buffer(s) are done playing, the source will progress to the AL_STOPPED state.
      */
     alSourcePlay(emitter_handler);
-    al_error();
+    MOLANG_AUDIO_LIBRARY_ERROR();
 }
 
 void molang_audio_emitter_pause(uint32_t emitter_handler)
 {
     alSourcePause(emitter_handler);
-    al_error();
+    MOLANG_AUDIO_LIBRARY_ERROR();
 }
 
 void molang_audio_emitter_stop(uint32_t emitter_handler)
 {
     alSourceStop(emitter_handler);
-    al_error();
+    MOLANG_AUDIO_LIBRARY_ERROR();
 }
 
 void molang_audio_emitter_looping(uint32_t emitter_handler, bool looping)
 {
     alSourcei(emitter_handler, AL_LOOPING, looping);
-    al_error();
+    MOLANG_AUDIO_LIBRARY_ERROR();
 }
 
 void molang_audio_emitter_position(uint32_t emitter_handler, float x, float y)
 {
     alSource3f(emitter_handler, AL_POSITION, x, y, 0);
-    al_error();
+    MOLANG_AUDIO_LIBRARY_ERROR();
 }
 
 void molang_audio_emitter_velocity(uint32_t emitter_handler, float x, float y)
 {
     alSource3f(emitter_handler, AL_VELOCITY, x, y, 0);
-    al_error();
+    MOLANG_AUDIO_LIBRARY_ERROR();
 }
 
 void molang_audio_emitter_direction(uint32_t emitter_handler, float x, float y)
 {
     alSource3f(emitter_handler, AL_DIRECTION, x, y, 0);
-    al_error();
+    MOLANG_AUDIO_LIBRARY_ERROR();
 }
 
 void molang_audio_listener_position(float x, float y)
 {
     alListener3f(AL_POSITION, x, y, 0);
-    al_error();
+    MOLANG_AUDIO_LIBRARY_ERROR();
 }
 
 void molang_audio_listener_velocity(float x, float y)
 {
     alListener3f(AL_VELOCITY, x, y, 0);
-    al_error();
+    MOLANG_AUDIO_LIBRARY_ERROR();
 }
 
 void molang_audio_listener_orientation(float x, float y)
 {
     ALfloat orientation[] = {x, y, 0};
     alListenerfv(AL_ORIENTATION, orientation);
-    al_error();
+    MOLANG_AUDIO_LIBRARY_ERROR();
 }

@@ -3,7 +3,6 @@
 #include <errno.h>
 #include <string.h>
 
-#include <AL/al.h>
 #include <AL/alc.h>
 
 #include "molang.h"
@@ -55,7 +54,7 @@ static ErlDrvData audio_erl_drv_start(ErlDrvPort port, char *buffer __attribute_
      * a specific portion of code, alGetError should be called before the isolated section to clear the
      * current error state.
      */
-    alGetError();
+    MOLANG_AUDIO_LIBRARY_ERROR();
 
     return (ErlDrvData) data;
 }

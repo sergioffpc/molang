@@ -5,7 +5,6 @@
 #include <string.h>
 
 #include <EGL/egl.h>
-#include <GLES3/gl3.h>
 #include <X11/Xlib.h>
 
 #include "molang.h"
@@ -154,7 +153,7 @@ static void *graphics_erl_drv_loop(void *arg)
     eglMakeCurrent(egl_display, egl_surface, egl_surface, egl_context);
     eglSwapInterval(egl_display, 1);
 
-    glGetError();
+    MOLANG_GRAPHICS_LIBRARY_ERROR();
 
     L("OpenGL ES vendor: %s\r\n", glGetString(GL_VENDOR));
     L("OpenGL ES renderer: %s\r\n", glGetString(GL_RENDERER));
@@ -162,8 +161,7 @@ static void *graphics_erl_drv_loop(void *arg)
     L("OpenGL ES shading language version: %s\r\n", glGetString(GL_SHADING_LANGUAGE_VERSION));
     L("OpenGL ES extensions: %s\r\n", glGetString(GL_EXTENSIONS));
 
-    glClearColor(0, 0, 1, 0);
-    glClearDepthf(1);
+    molang_graphics_renderer_initialize();
 
 #ifndef NDEBUG
     struct timespec t0;
@@ -193,7 +191,7 @@ static void *graphics_erl_drv_loop(void *arg)
             }
         }
 
-        molang_graphics_draw();
+        molang_graphics_renderer_draw();
 
         eglSwapBuffers(egl_display, egl_surface);
 
@@ -212,6 +210,8 @@ static void *graphics_erl_drv_loop(void *arg)
 
         frame_count++;
     }
+
+    molang_graphics_renderer_terminate();
 
     eglMakeCurrent(egl_display, egl_surface, egl_surface, EGL_NO_CONTEXT);
 

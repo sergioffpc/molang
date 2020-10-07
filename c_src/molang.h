@@ -9,6 +9,9 @@
 #include <stdlib.h>
 #include <time.h>
 
+#include <AL/al.h>
+#include <GLES3/gl3.h>
+
 #ifndef NDEBUG
 #define L(fmt, ...) do {                                                                                            \
     struct timespec ts;                                                                                             \
@@ -17,6 +20,56 @@
 } while (0)
 #else
 #define L(fmt, ...)
+#endif
+
+#ifndef NDEBUG
+inline void MOLANG_AUDIO_LIBRARY_ERROR()
+{
+    switch (alGetError()) {
+        case AL_INVALID_NAME:
+            L("invalid name parameter\r\n");
+            abort();
+        case AL_INVALID_ENUM:
+            L("invalid parameter\r\n");
+            abort();
+        case AL_INVALID_VALUE:
+            L("invalid enum parameter value\r\n");
+            abort();
+        case AL_INVALID_OPERATION:
+            L("illegal call\r\n");
+            abort();
+        case AL_OUT_OF_MEMORY:
+            L("unable to allocate memory\r\n");
+            abort();
+    }
+}
+#else
+#define MOLANG_AUDIO_LIBRARY_ERROR()
+#endif
+
+#ifndef NDEBUG
+inline void MOLANG_GRAPHICS_LIBRARY_ERROR()
+{
+    switch (glGetError()) {
+        case GL_INVALID_ENUM:
+            L("an unacceptable value is specified for an enumerated argument\r\n");
+            abort();
+        case GL_INVALID_VALUE:
+            L("a numeric argument is out of range\r\n");
+            abort();
+        case GL_INVALID_OPERATION:
+            L("the specified operation is not allowed in the current state\r\n");
+            abort();
+        case GL_INVALID_FRAMEBUFFER_OPERATION:
+            L("the framebuffer object is not complete\r\n");
+            abort();
+        case GL_OUT_OF_MEMORY:
+            L("there is not enough memory left to execute the command\r\n");
+            abort();
+    }
+}
+#else
+#define MOLANG_GRAPHICS_LIBRARY_ERROR()
 #endif
 
 #define MOLANG_AUDIO_ERL_DRV_BUFFER_CREATE_FN   0x00
@@ -59,6 +112,13 @@ extern void     molang_audio_listener_orientation   (float x, float y);
 extern uint32_t molang_graphics_image_create    (const char *file_name);
 extern void     molang_graphics_image_destroy   (uint32_t image_handler);
 
-extern void     molang_graphics_draw    (void);
+extern void     molang_graphics_renderer_initialize (void);
+extern void     molang_graphics_renderer_terminate  (void);
+
+extern void     molang_graphics_renderer_draw   (void);
+
+extern uint32_t molang_graphics_renderer_object_create   (uint32_t image_handler);
+extern void     molang_graphics_renderer_object_destroy  (uint32_t object_handler);
+extern void     molang_graphics_renderer_object_position (uint32_t object_handler, float x, float y);
 
 #endif

@@ -4,34 +4,7 @@
 #include <string.h>
 #include <png.h>
 
-#include <GLES3/gl3.h>
-
 #include "molang.h"
-
-#ifndef NDEBUG
-static void gl_error()
-{
-    switch (glGetError()) {
-        case GL_INVALID_ENUM:
-            L("an unacceptable value is specified for an enumerated argument\r\n");
-            abort();
-        case GL_INVALID_VALUE:
-            L("a numeric argument is out of range\r\n");
-            abort();
-        case GL_INVALID_OPERATION:
-            L("the specified operation is not allowed in the current state\r\n");
-            abort();
-        case GL_INVALID_FRAMEBUFFER_OPERATION:
-            L("the framebuffer object is not complete\r\n");
-            abort();
-        case GL_OUT_OF_MEMORY:
-            L("there is not enough memory left to execute the command\r\n");
-            abort();
-    }
-}
-#else
-#define gl_error()
-#endif
 
 /*
  * Check to see if a file is a PNG file using png_sig_cmp().  png_sig_cmp()
@@ -181,10 +154,10 @@ uint32_t molang_graphics_image_create(const char *filename)
 
     GLuint texture;
     glGenTextures(1, &texture);
-    gl_error();
+    MOLANG_GRAPHICS_LIBRARY_ERROR();
 
     glBindTexture(GL_TEXTURE_2D, texture);
-    gl_error();
+    MOLANG_GRAPHICS_LIBRARY_ERROR();
 
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
@@ -201,12 +174,12 @@ uint32_t molang_graphics_image_create(const char *filename)
                 ,format
                 ,GL_UNSIGNED_BYTE
                 ,data_buffer);
-    gl_error();
+    MOLANG_GRAPHICS_LIBRARY_ERROR();
 
     free(data_buffer);
 
     glGenerateMipmap(GL_TEXTURE_2D);
-    gl_error();
+    MOLANG_GRAPHICS_LIBRARY_ERROR();
 
     glBindTexture(GL_TEXTURE_2D, 0);
 
@@ -216,5 +189,5 @@ uint32_t molang_graphics_image_create(const char *filename)
 void molang_graphics_image_destroy(uint32_t image_handler)
 {
     glDeleteTextures(1, &image_handler);
-    gl_error();
+    MOLANG_GRAPHICS_LIBRARY_ERROR();
 }
