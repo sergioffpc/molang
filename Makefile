@@ -7,13 +7,13 @@ BUILD_DIR := ebin
 
 CC := gcc
 CFLAGS := -pedantic-errors -Wall -Wextra -Werror
-CPPFLAGS := -I $(C_INCLUDE_DIR)/ -D LEVEL1_DCACHE_LINESIZE=$(shell getconf LEVEL1_DCACHE_LINESIZE) \
-	-D PAGE_SIZE=$(shell getconf PAGE_SIZE)
+CPPFLAGS := -I$(C_INCLUDE_DIR)/ -D_GNU_SOURCE -DLEVEL1_DCACHE_LINESIZE=$(shell getconf LEVEL1_DCACHE_LINESIZE) \
+	-DPAGE_SIZE=$(shell getconf PAGE_SIZE)
 LDFLAGS := -fpic -shared -pthread
 LDLIBS := -lrt
 
 ERLC := erlc
-ERLCFLAGS := -Wall -Werror -I $(ERL_INCLUDE_DIR)/
+ERLCFLAGS := -Wall -Werror -I$(ERL_INCLUDE_DIR)/
 
 .PHONY: debug
 debug: CPPFLAGS += -g

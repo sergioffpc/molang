@@ -1,4 +1,5 @@
 #include <errno.h>
+#include <glob.h>
 #include <string.h>
 
 #include "molang.h"
@@ -14,11 +15,82 @@ typedef struct {
 #define GRAPHICS_RENDERER_OBJECTS_CAPACITY  512
 static graphics_renderer_object_t **graphics_renderer_objects = NULL;
 
-static GLuint graphics_renderer_vertex_shader;
-static GLuint graphics_renderer_fragment_shader;
-static GLuint graphics_renderer_shader_program;
+static GLuint graphics_renderer_program;
 
-void molang_graphics_renderer_initialize()
+static int glob_errfunc(const char *epath, int eerrno)
+{
+    L("unable to find pathnames matching the pattern: %s: %s\r\n", epath, strerror(eerrno));
+    abort();
+}
+
+static GLuint compile_shader(const char *pattern, GLuint shader_type)
+{
+#define GRAPHICS_RENDERER_SHADER_SOURCE_MAX_FILES   256
+    GLchar *source[GRAPHICS_RENDERER_SHADER_SOURCE_MAX_FILES];
+    GLint source_len[GRAPHICS_RENDERER_SHADER_SOURCE_MAX_FILES];
+
+    glob_t globbuf;
+    globbuf.gl_offs = 1;
+    glob(pattern, GLOB_ERR | GLOB_DOOFFS | GLOB_BRACE | GLOB_TILDE_CHECK, glob_errfunc, &globbuf);
+    if (globbuf.gl_pathc >= GRAPHICS_RENDERER_SHADER_SOURCE_MAX_FILES) {
+        L("maximum shader sources exceeded\r\n");
+        abort();
+    }
+
+    for (size_t i = 0; i < globbuf.gl_pathc; i++) {
+        FILE *fp;
+        if ((fp = fopen(globbuf.gl_pathv[i], "rb")) == NULL) {
+            L("unable to open file: %s: %s\r\n", globbuf.gl_pathv[i], strerror(errno));
+            abort();
+        }
+
+        fseek(fp, 0, SEEK_END);
+        source_len[i] = ftell(fp);
+        fseek(fp, 0, SEEK_SET);
+
+        source[i] = malloc(source_len[i]);
+        if (source[i] == NULL) {
+            L("unable to allocate memory: %s\r\n", strerror(errno));
+            abort();
+        }
+        fread(source[i], sizeof(char), source_len[i], fp);
+        fclose (fp);
+    }
+
+    GLuint shader = glCreateShader(shader_type);
+    MOLANG_GRAPHICS_LIBRARY_ERROR();
+    glShaderSource(shader, globbuf.gl_pathc, (const GLchar **) source, source_len);
+    MOLANG_GRAPHICS_LIBRARY_ERROR();
+    glCompileShader(shader);
+
+    GLint success = 0;
+    glGetShaderiv(shader, GL_COMPILE_STATUS, &success);
+    if (success == GL_FALSE) {
+        GLint log_size = 0;
+        glGetShaderiv(shader, GL_INFO_LOG_LENGTH, &log_size);
+
+        GLchar *error_log = malloc(log_size);
+        if (error_log == NULL) {
+            L("unable to allocate memory: %s\r\n", strerror(errno));
+            abort();
+        }
+
+        glGetShaderInfoLog(shader, log_size, &log_size, &error_log[0]);
+
+        L("unable to compile shader from source: %s: %s\r\n", pattern, error_log);
+        abort();
+    }
+
+    for (size_t i = 0; i < globbuf.gl_pathc; i++) {
+        free(source[i]);
+    }
+
+    globfree(&globbuf);
+
+    return shader;
+}
+
+void molang_graphics_renderer_initialize(int width, int height)
 {
     const size_t objects_size = GRAPHICS_RENDERER_OBJECTS_CAPACITY * sizeof(graphics_renderer_object_t *);
     graphics_renderer_objects = aligned_alloc(PAGE_SIZE, objects_size);
@@ -33,47 +105,49 @@ void molang_graphics_renderer_initialize()
     glDepthFunc(GL_LESS);
     glClearDepthf(1);
 
-    const char *vertex_shader_source = "#version 300 es     \n"
-        "in vec3 v_position;                                \n"
-        "void main() {                                      \n"
-        "   gl_Position = vec4(v_position, 1.0);            \n"
-        "}                                                  \n";
-    graphics_renderer_vertex_shader = glCreateShader(GL_VERTEX_SHADER);
-    MOLANG_GRAPHICS_LIBRARY_ERROR();
-    glShaderSource(graphics_renderer_vertex_shader, 1, &vertex_shader_source, NULL);
-    MOLANG_GRAPHICS_LIBRARY_ERROR();
-    glCompileShader(graphics_renderer_vertex_shader);
-    // TODO CHECK ERRORS USING
+    glViewport(0, 0, width, height);
 
-    const char *fragment_shader_source = "#version 300 es   \n"
-        "out vec4 f_color;                                  \n"
-        "void main() {                                      \n"
-        "   f_color = vec4(0, 1, 0, 1.0);                   \n"
-        "}                                                  \n";
-    graphics_renderer_fragment_shader = glCreateShader(GL_FRAGMENT_SHADER);
-    MOLANG_GRAPHICS_LIBRARY_ERROR();
-    glShaderSource(graphics_renderer_fragment_shader, 1, &fragment_shader_source, NULL);
-    MOLANG_GRAPHICS_LIBRARY_ERROR();
-    glCompileShader(graphics_renderer_fragment_shader);
-    // TODO CHECK ERRORS USING
+    const GLuint vert_shader = compile_shader("../priv/shader/*.vert", GL_VERTEX_SHADER);
+    const GLuint frag_shader = compile_shader("../priv/shader/*.frag", GL_FRAGMENT_SHADER);
 
-    graphics_renderer_shader_program = glCreateProgram();
+    graphics_renderer_program = glCreateProgram();
     MOLANG_GRAPHICS_LIBRARY_ERROR();
-    glAttachShader(graphics_renderer_shader_program, graphics_renderer_vertex_shader);
-    glAttachShader(graphics_renderer_shader_program, graphics_renderer_fragment_shader);
-    glLinkProgram(graphics_renderer_shader_program);
-    // TODO CHECK ERRORS USING
+    glAttachShader(graphics_renderer_program, vert_shader);
+    glAttachShader(graphics_renderer_program, frag_shader);
+    glLinkProgram(graphics_renderer_program);
+
+    GLint success = 0;
+    glGetProgramiv(graphics_renderer_program, GL_LINK_STATUS, &success);
+    if (success == GL_FALSE) {
+        GLint log_size = 0;
+        glGetProgramiv(graphics_renderer_program, GL_INFO_LOG_LENGTH, &log_size);
+
+        GLchar *error_log = malloc(log_size);
+        if (error_log == NULL) {
+            L("unable to allocate memory: %s\r\n", strerror(errno));
+            abort();
+        }
+
+        glGetProgramInfoLog(graphics_renderer_program, log_size, &log_size, &error_log[0]);
+
+        L("unable to link program: %s\r\n", error_log);
+        abort();
+    }
 }
 
 void molang_graphics_renderer_terminate()
 {
-    glDetachShader(graphics_renderer_shader_program, graphics_renderer_vertex_shader);
-    glDetachShader(graphics_renderer_shader_program, graphics_renderer_fragment_shader);
+    GLint shader;
 
-    glDeleteShader(graphics_renderer_vertex_shader);
-    glDeleteShader(graphics_renderer_fragment_shader);
+    glGetShaderiv(GL_VERTEX_SHADER, GL_SHADER_TYPE, &shader);
+    glDetachShader(graphics_renderer_program, shader);
+    glDeleteShader(shader);
 
-    glDeleteProgram(graphics_renderer_shader_program);
+    glGetShaderiv(GL_FRAGMENT_SHADER, GL_SHADER_TYPE, &shader);
+    glDetachShader(graphics_renderer_program, shader);
+    glDeleteShader(shader);
+
+    glDeleteProgram(graphics_renderer_program);
     MOLANG_GRAPHICS_LIBRARY_ERROR();
 
     free(graphics_renderer_objects);
@@ -82,7 +156,7 @@ void molang_graphics_renderer_terminate()
 void molang_graphics_renderer_draw()
 {
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-    glUseProgram(graphics_renderer_shader_program);
+    glUseProgram(graphics_renderer_program);
     MOLANG_GRAPHICS_LIBRARY_ERROR();
 
     for (uint32_t i = 0; i < GRAPHICS_RENDERER_OBJECTS_CAPACITY; i++) {
@@ -119,17 +193,20 @@ uint32_t molang_graphics_renderer_object_create(uint32_t image_handler)
             MOLANG_GRAPHICS_LIBRARY_ERROR();
             glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
             MOLANG_GRAPHICS_LIBRARY_ERROR();
+            glBindBuffer(GL_ARRAY_BUFFER, 0);
 
             glGenVertexArrays(1, &(object->vertex_array));
             MOLANG_GRAPHICS_LIBRARY_ERROR();
             glBindVertexArray(object->vertex_array);
             MOLANG_GRAPHICS_LIBRARY_ERROR();
-            glEnableVertexAttribArray(0);
+#define GRAPHICS_RENDERER_VERTEX_ATTRIB 0
+            glEnableVertexAttribArray(GRAPHICS_RENDERER_VERTEX_ATTRIB);
             MOLANG_GRAPHICS_LIBRARY_ERROR();
             glBindBuffer(GL_ARRAY_BUFFER, object->vertex_buffer);
             MOLANG_GRAPHICS_LIBRARY_ERROR();
-            glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, NULL);
+            glVertexAttribPointer(GRAPHICS_RENDERER_VERTEX_ATTRIB, 3, GL_FLOAT, GL_FALSE, 0, NULL);
             MOLANG_GRAPHICS_LIBRARY_ERROR();
+            glBindVertexArray(0);
 
             object->texture_buffer = image_handler;
 

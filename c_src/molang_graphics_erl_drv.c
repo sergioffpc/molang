@@ -119,7 +119,7 @@ static void *graphics_erl_drv_loop(void *arg)
     }
 
     XSizeHints x11_window_hints = {
-        .flags	    = PMinSize | PMaxSize,
+        .flags      = PMinSize | PMaxSize,
         .min_width  = width,
         .max_width  = width,
         .min_height = height,
@@ -161,18 +161,17 @@ static void *graphics_erl_drv_loop(void *arg)
     L("OpenGL ES shading language version: %s\r\n", glGetString(GL_SHADING_LANGUAGE_VERSION));
     L("OpenGL ES extensions: %s\r\n", glGetString(GL_EXTENSIONS));
 
-    molang_graphics_renderer_initialize();
+    molang_graphics_renderer_initialize(width, height);
 
-#ifndef NDEBUG
-    struct timespec t0;
-    clock_gettime(CLOCK_MONOTONIC, &t0);
-
-    uint64_t f0 = 0;
-#endif
     uint64_t frame_count = 0;
 
     data->is_running = true;
     while (data->is_running) {
+#ifndef NDEBUG
+        struct timespec t0;
+        clock_gettime(CLOCK_MONOTONIC, &t0);
+#endif
+
         while (XPending(x11_display)) {
             XEvent event;
             XNextEvent(x11_display, &event);
@@ -196,16 +195,21 @@ static void *graphics_erl_drv_loop(void *arg)
         eglSwapBuffers(egl_display, egl_surface);
 
 #ifndef NDEBUG
-        if (++f0 == 300) {
-            struct timespec t1;
-            clock_gettime(CLOCK_MONOTONIC, &t1);
-            uint64_t frame_delta = ((t1.tv_sec - t0.tv_sec) * 1000000000 + (t1.tv_nsec - t0.tv_nsec)) / 1000000;
+    struct timespec t1;
+    clock_gettime(CLOCK_MONOTONIC, &t1);
+    uint64_t frame_delta = ((t1.tv_sec - t0.tv_sec) * 1000000000 + (t1.tv_nsec - t0.tv_nsec)) / 1000000;
 
-            L("frame=%ld avg_time=%ldms\r\n", frame_count, frame_delta / f0);
+    char *str = NULL;
+    if (asprintf(&str, "frame:%ld|time:%ldms", frame_count, frame_delta) != -1) {
+        XGCValues gc_values = {
+            .foreground = 0x22ff00,
+        };
 
-            clock_gettime(CLOCK_MONOTONIC, &t0);
-            f0 = 0;
-        }
+        GC gc = XCreateGC(x11_display, x11_window, GCForeground, &gc_values);
+        XDrawString(x11_display, x11_window, gc, 10, 20, str, strlen(str));
+
+        free(str);
+    }
 #endif
 
         frame_count++;

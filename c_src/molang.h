@@ -112,7 +112,7 @@ extern void     molang_audio_listener_orientation   (float x, float y);
 extern uint32_t molang_graphics_image_create    (const char *file_name);
 extern void     molang_graphics_image_destroy   (uint32_t image_handler);
 
-extern void     molang_graphics_renderer_initialize (void);
+extern void     molang_graphics_renderer_initialize (int width, int height);
 extern void     molang_graphics_renderer_terminate  (void);
 
 extern void     molang_graphics_renderer_draw   (void);
