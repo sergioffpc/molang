@@ -19,6 +19,8 @@ static GLuint graphics_renderer_program;
 
 static int glob_errfunc(const char *epath, int eerrno)
 {
+    (void) epath;
+    (void) eerrno;
     L("unable to find pathnames matching the pattern: %s: %s\r\n", epath, strerror(eerrno));
     abort();
 }
@@ -65,7 +67,13 @@ static GLuint compile_shader(const char *pattern, GLuint shader_type)
             L("unable to allocate memory: %s\r\n", strerror(errno));
             abort();
         }
-        fread(source[i], sizeof(char), source_len[i], fp);
+
+        size_t count = fread(source[i], sizeof(char), source_len[i], fp);
+        if (count != (size_t) source_len[i] && ferror(fp)) {
+            L("unable to read file: %s\r\n", strerror(errno));
+            abort();
+        }
+
         fclose (fp);
     }
 
@@ -104,6 +112,84 @@ static GLuint compile_shader(const char *pattern, GLuint shader_type)
 
 void molang_graphics_renderer_initialize(int width, int height)
 {
+#ifndef NDEBUG
+    struct gl_param {
+        GLchar  *name;
+        GLenum   target;
+        GLenum   type;
+    } params[] = {
+        { .target = GL_MAX_COMPUTE_SHADER_STORAGE_BLOCKS,           .name = "GL_MAX_COMPUTE_SHADER_STORAGE_BLOCKS",         .type = GL_INT },
+        { .target = GL_MAX_COMBINED_SHADER_STORAGE_BLOCKS,          .name = "GL_MAX_COMBINED_SHADER_STORAGE_BLOCKS",        .type = GL_INT },
+        { .target = GL_MAX_COMPUTE_UNIFORM_BLOCKS,                  .name = "GL_MAX_COMPUTE_UNIFORM_BLOCKS",                .type = GL_INT },
+        { .target = GL_MAX_COMPUTE_TEXTURE_IMAGE_UNITS,             .name = "GL_MAX_COMPUTE_TEXTURE_IMAGE_UNITS",           .type = GL_INT },
+        { .target = GL_MAX_COMPUTE_UNIFORM_COMPONENTS,              .name = "GL_MAX_COMPUTE_UNIFORM_COMPONENTS",            .type = GL_INT },
+        { .target = GL_MAX_COMPUTE_ATOMIC_COUNTERS,                 .name = "GL_MAX_COMPUTE_ATOMIC_COUNTERS",               .type = GL_INT },
+        { .target = GL_MAX_COMPUTE_ATOMIC_COUNTER_BUFFERS,          .name = "GL_MAX_COMPUTE_ATOMIC_COUNTER_BUFFERS",        .type = GL_INT },
+        { .target = GL_MAX_COMBINED_COMPUTE_UNIFORM_COMPONENTS,     .name = "GL_MAX_COMBINED_COMPUTE_UNIFORM_COMPONENTS",   .type = GL_INT },
+        { .target = GL_MAX_COMPUTE_WORK_GROUP_INVOCATIONS,          .name = "GL_MAX_COMPUTE_WORK_GROUP_INVOCATIONS",        .type = GL_INT },
+        { .target = GL_MAX_3D_TEXTURE_SIZE,                         .name = "GL_MAX_3D_TEXTURE_SIZE",                       .type = GL_INT },
+        { .target = GL_MAX_ARRAY_TEXTURE_LAYERS,                    .name = "GL_MAX_ARRAY_TEXTURE_LAYERS",                  .type = GL_INT },
+        { .target = GL_MAX_COLOR_TEXTURE_SAMPLES,                   .name = "GL_MAX_COLOR_TEXTURE_SAMPLES",                 .type = GL_INT },
+        { .target = GL_MAX_COMBINED_ATOMIC_COUNTERS,                .name = "GL_MAX_COMBINED_ATOMIC_COUNTERS",              .type = GL_INT },
+        { .target = GL_MAX_COMBINED_FRAGMENT_UNIFORM_COMPONENTS,    .name = "GL_MAX_COMBINED_FRAGMENT_UNIFORM_COMPONENTS",  .type = GL_INT },
+        { .target = GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS,            .name = "GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS",          .type = GL_INT },
+        { .target = GL_MAX_COMBINED_UNIFORM_BLOCKS,                 .name = "GL_MAX_COMBINED_UNIFORM_BLOCKS",               .type = GL_INT },
+        { .target = GL_MAX_COMBINED_VERTEX_UNIFORM_COMPONENTS,      .name = "GL_MAX_COMBINED_VERTEX_UNIFORM_COMPONENTS",    .type = GL_INT },
+        { .target = GL_MAX_CUBE_MAP_TEXTURE_SIZE,                   .name = "GL_MAX_CUBE_MAP_TEXTURE_SIZE",                 .type = GL_INT },
+        { .target = GL_MAX_DEPTH_TEXTURE_SAMPLES,                   .name = "GL_MAX_DEPTH_TEXTURE_SAMPLES",                 .type = GL_INT },
+        { .target = GL_MAX_DRAW_BUFFERS,                            .name = "GL_MAX_DRAW_BUFFERS",                          .type = GL_INT },
+        { .target = GL_MAX_ELEMENTS_INDICES,                        .name = "GL_MAX_ELEMENTS_INDICES",                      .type = GL_INT },
+        { .target = GL_MAX_ELEMENTS_VERTICES,                       .name = "GL_MAX_ELEMENTS_VERTICES",                     .type = GL_INT },
+        { .target = GL_MAX_FRAGMENT_ATOMIC_COUNTERS,                .name = "GL_MAX_FRAGMENT_ATOMIC_COUNTERS",              .type = GL_INT },
+        { .target = GL_MAX_FRAGMENT_SHADER_STORAGE_BLOCKS,          .name = "GL_MAX_FRAGMENT_SHADER_STORAGE_BLOCKS",        .type = GL_INT },
+        { .target = GL_MAX_FRAGMENT_UNIFORM_COMPONENTS,             .name = "GL_MAX_FRAGMENT_UNIFORM_COMPONENTS",           .type = GL_INT },
+        { .target = GL_MAX_FRAGMENT_UNIFORM_VECTORS,                .name = "GL_MAX_FRAGMENT_UNIFORM_VECTORS",              .type = GL_INT },
+        { .target = GL_MAX_FRAGMENT_UNIFORM_BLOCKS,                 .name = "GL_MAX_FRAGMENT_UNIFORM_BLOCKS",               .type = GL_INT },
+        { .target = GL_MAX_FRAMEBUFFER_WIDTH,                       .name = "GL_MAX_FRAMEBUFFER_WIDTH",                     .type = GL_INT },
+        { .target = GL_MAX_FRAMEBUFFER_HEIGHT,                      .name = "GL_MAX_FRAMEBUFFER_HEIGHT",                    .type = GL_INT },
+        { .target = GL_MAX_FRAMEBUFFER_SAMPLES,                     .name = "GL_MAX_FRAMEBUFFER_SAMPLES",                   .type = GL_INT },
+        { .target = GL_MAX_INTEGER_SAMPLES,                         .name = "GL_MAX_INTEGER_SAMPLES",                       .type = GL_INT },
+        { .target = GL_MAX_RENDERBUFFER_SIZE,                       .name = "GL_MAX_RENDERBUFFER_SIZE",                     .type = GL_INT },
+        { .target = GL_MAX_SAMPLE_MASK_WORDS,                       .name = "GL_MAX_SAMPLE_MASK_WORDS",                     .type = GL_INT },
+        { .target = GL_MAX_SHADER_STORAGE_BUFFER_BINDINGS,          .name = "GL_MAX_SHADER_STORAGE_BUFFER_BINDINGS",        .type = GL_INT },
+        { .target = GL_MAX_TEXTURE_IMAGE_UNITS,                     .name = "GL_MAX_TEXTURE_IMAGE_UNITS",                   .type = GL_INT },
+        { .target = GL_MAX_TEXTURE_LOD_BIAS,                        .name = "GL_MAX_TEXTURE_LOD_BIAS",                      .type = GL_INT },
+        { .target = GL_MAX_TEXTURE_SIZE,                            .name = "GL_MAX_TEXTURE_SIZE",                          .type = GL_INT },
+        { .target = GL_MAX_UNIFORM_BUFFER_BINDINGS,                 .name = "GL_MAX_UNIFORM_BUFFER_BINDINGS",               .type = GL_INT },
+        { .target = GL_MAX_UNIFORM_BLOCK_SIZE,                      .name = "GL_MAX_UNIFORM_BLOCK_SIZE",                    .type = GL_INT },
+        { .target = GL_MAX_UNIFORM_LOCATIONS,                       .name = "GL_MAX_UNIFORM_LOCATIONS",                     .type = GL_INT },
+        { .target = GL_MAX_VARYING_COMPONENTS,                      .name = "GL_MAX_VARYING_COMPONENTS",                    .type = GL_INT },
+        { .target = GL_MAX_VARYING_VECTORS,                         .name = "GL_MAX_VARYING_VECTORS",                       .type = GL_INT },
+        { .target = GL_MAX_VERTEX_ATOMIC_COUNTERS,                  .name = "GL_MAX_VERTEX_ATOMIC_COUNTERS",                .type = GL_INT },
+        { .target = GL_MAX_VERTEX_ATTRIBS,                          .name = "GL_MAX_VERTEX_ATTRIBS",                        .type = GL_INT },
+        { .target = GL_MAX_VERTEX_SHADER_STORAGE_BLOCKS,            .name = "GL_MAX_VERTEX_SHADER_STORAGE_BLOCKS",          .type = GL_INT },
+        { .target = GL_MAX_VERTEX_TEXTURE_IMAGE_UNITS,              .name = "GL_MAX_VERTEX_TEXTURE_IMAGE_UNITS",            .type = GL_INT },
+        { .target = GL_MAX_VERTEX_UNIFORM_COMPONENTS,               .name = "GL_MAX_VERTEX_UNIFORM_COMPONENTS",             .type = GL_INT },
+        { .target = GL_MAX_VERTEX_UNIFORM_VECTORS,                  .name = "GL_MAX_VERTEX_UNIFORM_VECTORS",                .type = GL_INT },
+        { .target = GL_MAX_VERTEX_OUTPUT_COMPONENTS,                .name = "GL_MAX_VERTEX_OUTPUT_COMPONENTS",              .type = GL_INT },
+        { .target = GL_MAX_VERTEX_UNIFORM_BLOCKS,                   .name = "GL_MAX_VERTEX_UNIFORM_BLOCKS",                 .type = GL_INT },
+        { .target = GL_MAX_VIEWPORT_DIMS,                           .name = "GL_MAX_VIEWPORT_DIMS",                         .type = GL_INT },
+        { .target = GL_MAX_VERTEX_ATTRIB_RELATIVE_OFFSET,           .name = "GL_MAX_VERTEX_ATTRIB_RELATIVE_OFFSET",         .type = GL_INT },
+        { .target = GL_MAX_VERTEX_ATTRIB_BINDINGS,                  .name = "GL_MAX_VERTEX_ATTRIB_BINDINGS",                .type = GL_INT },
+    };
+
+    for (size_t i = 0; i < (sizeof(params) / sizeof(struct gl_param)); i++) {
+        struct gl_param *param = &params[i];
+        switch (param->type) {
+            case GL_INT:
+            {
+                GLint value;
+
+                glGetIntegerv(param->target, &value);
+                MOLANG_GRAPHICS_LIBRARY_ERROR();
+
+                L("%s %d\r\n", param->name, value);
+            }
+                break;
+        }
+    }
+#endif
+
     const size_t objects_size = GRAPHICS_RENDERER_OBJECTS_CAPACITY * sizeof(graphics_renderer_object_t *);
     graphics_renderer_objects = aligned_alloc(PAGE_SIZE, objects_size);
     if (graphics_renderer_objects == NULL) {
@@ -130,8 +216,30 @@ void molang_graphics_renderer_initialize(int width, int height)
     glAttachShader(graphics_renderer_program, frag_shader);
     glLinkProgram(graphics_renderer_program);
 
-    GLint success = 0;
+    GLint success = GL_FALSE;
     glGetProgramiv(graphics_renderer_program, GL_LINK_STATUS, &success);
+    if (success == GL_FALSE) {
+        GLint log_size = 0;
+        glGetProgramiv(graphics_renderer_program, GL_INFO_LOG_LENGTH, &log_size);
+
+        GLchar *error_log = malloc(log_size);
+        if (error_log == NULL) {
+            L("unable to allocate memory: %s\r\n", strerror(errno));
+            abort();
+        }
+
+        glGetProgramInfoLog(graphics_renderer_program, log_size, &log_size, &error_log[0]);
+
+        L("unable to link program: %s\r\n", error_log);
+        abort();
+    }
+
+    /* Validate the shader program before using it.  Only do this during
+     * initialization because it is quite computationally expensive.  */
+    glValidateProgram(graphics_renderer_program);
+
+    success = GL_FALSE;
+    glGetProgramiv(graphics_renderer_program, GL_VALIDATE_STATUS, &success);
     if (success == GL_FALSE) {
         GLint log_size = 0;
         glGetProgramiv(graphics_renderer_program, GL_INFO_LOG_LENGTH, &log_size);

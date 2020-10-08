@@ -10,7 +10,7 @@
 #include <time.h>
 
 #include <AL/al.h>
-#include <GLES3/gl3.h>
+#include <GLES3/gl31.h>
 
 #ifndef NDEBUG
 #define L(fmt, ...) do {                                                                                            \
