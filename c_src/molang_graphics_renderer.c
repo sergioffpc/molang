@@ -31,7 +31,19 @@ static GLuint compile_shader(const char *pattern, GLuint shader_type)
 
     glob_t globbuf;
     globbuf.gl_offs = 1;
-    glob(pattern, GLOB_ERR | GLOB_DOOFFS | GLOB_BRACE | GLOB_TILDE_CHECK, glob_errfunc, &globbuf);
+
+    switch (glob(pattern, GLOB_ERR | GLOB_BRACE | GLOB_TILDE_CHECK, glob_errfunc, &globbuf)) {
+        case GLOB_NOSPACE:
+            L("out of memory: %s\r\n", pattern);
+            abort();
+        case GLOB_ABORTED:
+            L("read error: %s\r\n", pattern);
+            abort();
+        case GLOB_NOMATCH:
+            L("no found matches: %s\r\n", pattern);
+            abort();
+    }
+
     if (globbuf.gl_pathc >= GRAPHICS_RENDERER_SHADER_SOURCE_MAX_FILES) {
         L("maximum shader sources exceeded\r\n");
         abort();
@@ -107,8 +119,10 @@ void molang_graphics_renderer_initialize(int width, int height)
 
     glViewport(0, 0, width, height);
 
-    const GLuint vert_shader = compile_shader("../priv/shader/*.vert", GL_VERTEX_SHADER);
-    const GLuint frag_shader = compile_shader("../priv/shader/*.frag", GL_FRAGMENT_SHADER);
+#define GRAPHICS_RENDERER_VERTEX_SHADER_SOURCE_FILES    "../priv/shader/*.vert"
+    const GLuint vert_shader = compile_shader(GRAPHICS_RENDERER_VERTEX_SHADER_SOURCE_FILES, GL_VERTEX_SHADER);
+#define GRAPHICS_RENDERER_FRAGMENT_SHADER_SOURCE_FILES  "../priv/shader/*.frag"
+    const GLuint frag_shader = compile_shader(GRAPHICS_RENDERER_FRAGMENT_SHADER_SOURCE_FILES, GL_FRAGMENT_SHADER);
 
     graphics_renderer_program = glCreateProgram();
     MOLANG_GRAPHICS_LIBRARY_ERROR();

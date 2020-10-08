@@ -23,51 +23,49 @@
 #endif
 
 #ifndef NDEBUG
-inline void MOLANG_AUDIO_LIBRARY_ERROR()
-{
-    switch (alGetError()) {
-        case AL_INVALID_NAME:
-            L("invalid name parameter\r\n");
-            abort();
-        case AL_INVALID_ENUM:
-            L("invalid parameter\r\n");
-            abort();
-        case AL_INVALID_VALUE:
-            L("invalid enum parameter value\r\n");
-            abort();
-        case AL_INVALID_OPERATION:
-            L("illegal call\r\n");
-            abort();
-        case AL_OUT_OF_MEMORY:
-            L("unable to allocate memory\r\n");
-            abort();
-    }
-}
+#define MOLANG_AUDIO_LIBRARY_ERROR() do {                                                                           \
+    switch (alGetError()) {                                                                                         \
+        case AL_INVALID_NAME:                                                                                       \
+            L("invalid name parameter\r\n");                                                                        \
+            abort();                                                                                                \
+        case AL_INVALID_ENUM:                                                                                       \
+            L("invalid parameter\r\n");                                                                             \
+            abort();                                                                                                \
+        case AL_INVALID_VALUE:                                                                                      \
+            L("invalid enum parameter value\r\n");                                                                  \
+            abort();                                                                                                \
+        case AL_INVALID_OPERATION:                                                                                  \
+            L("illegal call\r\n");                                                                                  \
+            abort();                                                                                                \
+        case AL_OUT_OF_MEMORY:                                                                                      \
+            L("unable to allocate memory\r\n");                                                                     \
+            abort();                                                                                                \
+    }                                                                                                               \
+} while (0)
 #else
 #define MOLANG_AUDIO_LIBRARY_ERROR()
 #endif
 
 #ifndef NDEBUG
-inline void MOLANG_GRAPHICS_LIBRARY_ERROR()
-{
-    switch (glGetError()) {
-        case GL_INVALID_ENUM:
-            L("an unacceptable value is specified for an enumerated argument\r\n");
-            abort();
-        case GL_INVALID_VALUE:
-            L("a numeric argument is out of range\r\n");
-            abort();
-        case GL_INVALID_OPERATION:
-            L("the specified operation is not allowed in the current state\r\n");
-            abort();
-        case GL_INVALID_FRAMEBUFFER_OPERATION:
-            L("the framebuffer object is not complete\r\n");
-            abort();
-        case GL_OUT_OF_MEMORY:
-            L("there is not enough memory left to execute the command\r\n");
-            abort();
-    }
-}
+#define MOLANG_GRAPHICS_LIBRARY_ERROR() do {                                                                        \
+    switch (glGetError()) {                                                                                         \
+        case GL_INVALID_ENUM:                                                                                       \
+            L("an unacceptable value is specified for an enumerated argument\r\n");                                 \
+            abort();                                                                                                \
+        case GL_INVALID_VALUE:                                                                                      \
+            L("a numeric argument is out of range\r\n");                                                            \
+            abort();                                                                                                \
+        case GL_INVALID_OPERATION:                                                                                  \
+            L("the specified operation is not allowed in the current state\r\n");                                   \
+            abort();                                                                                                \
+        case GL_INVALID_FRAMEBUFFER_OPERATION:                                                                      \
+            L("the framebuffer object is not complete\r\n");                                                        \
+            abort();                                                                                                \
+        case GL_OUT_OF_MEMORY:                                                                                      \
+            L("there is not enough memory left to execute the command\r\n");                                        \
+            abort();                                                                                                \
+    }                                                                                                               \
+} while (0)
 #else
 #define MOLANG_GRAPHICS_LIBRARY_ERROR()
 #endif
