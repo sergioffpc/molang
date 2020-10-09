@@ -298,6 +298,32 @@ static void graphics_erl_drv_output(ErlDrvData data, char *buffer, ErlDrvSizeT l
             molang_graphics_image_destroy(image_handler);
         }
             break;
+        case GRAPHICS_ERL_DRV_OBJECT_CREATE_FN:
+        {
+            EI_ULONGLONG image_handler = 0;
+            ei_decode_version(buffer, &index, NULL);
+            ei_decode_ulonglong(buffer, &index, &image_handler);
+
+            uint32_t object_handler = molang_graphics_renderer_object_create(image_handler);
+
+            ei_x_buff x;
+            ei_x_new_with_version(&x);
+            ei_x_encode_ulonglong(&x, object_handler);
+
+            driver_output(((graphics_erl_drv_data_t *) data)->port, x.buff, x.index);
+
+            ei_x_free(&x);
+        }
+            break;
+        case GRAPHICS_ERL_DRV_OBJECT_DESTROY_FN:
+        {
+            EI_ULONGLONG object_handler = 0;
+            ei_decode_version(buffer, &index, NULL);
+            ei_decode_ulonglong(buffer, &index, &object_handler);
+
+            molang_graphics_renderer_object_destroy(object_handler);
+        }
+            break;
         default:
             L("specified parameter is not valid\r\n");
             abort();

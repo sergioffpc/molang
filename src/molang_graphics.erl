@@ -5,6 +5,9 @@
 %% API
 -export([start_link/0]).
 
+-export([create_image/1, destroy_image/1]).
+-export([create_object/1, destroy_object/1]).
+
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
   code_change/3]).
@@ -31,6 +34,16 @@ start_link() ->
   end,
   gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
 
+create_image(Filename) ->
+  gen_server:call(?SERVER, {create_image, Filename}).
+destroy_image(Image) ->
+  gen_server:cast(?SERVER, {destroy_image, Image}).
+
+create_object(Image) ->
+  gen_server:call(?SERVER, {create_object, Image}).
+destroy_object(Object) ->
+  gen_server:cast(?SERVER, {destroy_object, Object}).
+
 %%%===================================================================
 %%% gen_server callbacks
 %%%===================================================================
@@ -54,8 +67,13 @@ init([]) ->
   {noreply, NewState :: #molang_graphics_state{}, timeout() | hibernate} |
   {stop, Reason :: term(), Reply :: term(), NewState :: #molang_graphics_state{}} |
   {stop, Reason :: term(), NewState :: #molang_graphics_state{}}).
-handle_call(_Request, _From, State = #molang_graphics_state{}) ->
-  {reply, ok, State}.
+handle_call({create_image, Filename}, _From, State = #molang_graphics_state{port = Port}) ->
+  erlang:port_command(Port, [erlang:term_to_binary(16#00), erlang:term_to_binary(Filename)]),
+  {reply, {ok, wait_data(Port)}, State};
+handle_call({create_object, Image}, _From, State = #molang_graphics_state{port = Port}) ->
+  erlang:port_command(Port, [erlang:term_to_binary(16#10), erlang:term_to_binary(Image)]),
+  {reply, {ok, wait_data(Port)}, State}.
+
 
 %% @private
 %% @doc Handling cast messages
@@ -63,7 +81,11 @@ handle_call(_Request, _From, State = #molang_graphics_state{}) ->
   {noreply, NewState :: #molang_graphics_state{}} |
   {noreply, NewState :: #molang_graphics_state{}, timeout() | hibernate} |
   {stop, Reason :: term(), NewState :: #molang_graphics_state{}}).
-handle_cast(_Request, State = #molang_graphics_state{}) ->
+handle_cast({destroy_image, Image}, State = #molang_graphics_state{port = Port}) ->
+  erlang:port_command(Port, [erlang:term_to_binary(16#01), erlang:term_to_binary(Image)]),
+  {noreply, State};
+handle_cast({destroy_object, Object}, State = #molang_graphics_state{port = Port}) ->
+  erlang:port_command(Port, [erlang:term_to_binary(16#11), erlang:term_to_binary(Object)]),
   {noreply, State}.
 
 %% @private
@@ -96,3 +118,9 @@ code_change(_OldVsn, State = #molang_graphics_state{}, _Extra) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+-spec(wait_data(Port :: port()) -> term()).
+wait_data(Port) ->
+  receive
+    {Port, {data, Data}} ->
+      erlang:binary_to_term(Data)
+  end.

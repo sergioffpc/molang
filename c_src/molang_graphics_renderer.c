@@ -6,10 +6,11 @@
 
 typedef struct {
     GLuint  vertex_buffer;
-    GLuint  vertex_array;
-    GLuint  texture_buffer;
+    GLint   vertex_buffer_size;
 
-    GLfloat position[2];
+    GLuint  vertex_array;
+
+    GLuint  texture_buffer;
 } graphics_renderer_object_t;
 
 #define GRAPHICS_RENDERER_OBJECTS_CAPACITY  512
@@ -24,6 +25,43 @@ static int glob_errfunc(const char *epath, int eerrno)
     L("unable to find pathnames matching the pattern: %s: %s\r\n", epath, strerror(eerrno));
     abort();
 }
+
+#ifndef NDEBUG
+static const char *gl_type_to_str(const GLenum type)
+{
+    switch (type) {
+        case GL_BOOL:
+            return "bool";
+        case GL_INT:
+            return "int";
+        case GL_FLOAT:
+            return "float";
+        case GL_FLOAT_VEC2:
+            return "vec2";
+        case GL_FLOAT_VEC3:
+            return "vec3";
+        case GL_FLOAT_VEC4:
+            return "vec4";
+        case GL_FLOAT_MAT2:
+            return "mat2";
+        case GL_FLOAT_MAT3:
+            return "mat3";
+        case GL_FLOAT_MAT4:
+            return "mat4";
+        case GL_SAMPLER_2D:
+            return "sampler2D";
+        case GL_SAMPLER_3D:
+            return "sampler3D";
+        case GL_SAMPLER_CUBE:
+            return "samplerCube";
+        case GL_SAMPLER_2D_SHADOW:
+            return "sampler2DShadow";
+        default:
+            L("invalid GL type\r\n");
+            abort();
+    }
+}
+#endif
 
 static GLuint compile_shader(const char *pattern, GLuint shader_type)
 {
@@ -117,7 +155,7 @@ void molang_graphics_renderer_initialize(int width, int height)
         GLchar  *name;
         GLenum   target;
         GLenum   type;
-    } params[] = {
+    } gl_params[] = {
         { .target = GL_MAX_COMPUTE_SHADER_STORAGE_BLOCKS,           .name = "GL_MAX_COMPUTE_SHADER_STORAGE_BLOCKS",         .type = GL_INT },
         { .target = GL_MAX_COMBINED_SHADER_STORAGE_BLOCKS,          .name = "GL_MAX_COMBINED_SHADER_STORAGE_BLOCKS",        .type = GL_INT },
         { .target = GL_MAX_COMPUTE_UNIFORM_BLOCKS,                  .name = "GL_MAX_COMPUTE_UNIFORM_BLOCKS",                .type = GL_INT },
@@ -173,8 +211,9 @@ void molang_graphics_renderer_initialize(int width, int height)
         { .target = GL_MAX_VERTEX_ATTRIB_BINDINGS,                  .name = "GL_MAX_VERTEX_ATTRIB_BINDINGS",                .type = GL_INT },
     };
 
-    for (size_t i = 0; i < (sizeof(params) / sizeof(struct gl_param)); i++) {
-        struct gl_param *param = &params[i];
+    L("OpenGL ES parameters:\r\n");
+    for (size_t i = 0; i < (sizeof(gl_params) / sizeof(struct gl_param)); i++) {
+        struct gl_param *param = &gl_params[i];
         switch (param->type) {
             case GL_INT:
             {
@@ -183,7 +222,7 @@ void molang_graphics_renderer_initialize(int width, int height)
                 glGetIntegerv(param->target, &value);
                 MOLANG_GRAPHICS_LIBRARY_ERROR();
 
-                L("%s %d\r\n", param->name, value);
+                L("\t%s %d\r\n", param->name, value);
             }
                 break;
         }
@@ -196,6 +235,7 @@ void molang_graphics_renderer_initialize(int width, int height)
         L("unable to allocate memory: %s\r\n", strerror(errno));
         abort();
     }
+    explicit_bzero(graphics_renderer_objects, objects_size);
 
     glClearColor(0, 0, 1, 0);
 
@@ -216,9 +256,9 @@ void molang_graphics_renderer_initialize(int width, int height)
     glAttachShader(graphics_renderer_program, frag_shader);
     glLinkProgram(graphics_renderer_program);
 
-    GLint success = GL_FALSE;
-    glGetProgramiv(graphics_renderer_program, GL_LINK_STATUS, &success);
-    if (success == GL_FALSE) {
+    GLint link_status = GL_FALSE;
+    glGetProgramiv(graphics_renderer_program, GL_LINK_STATUS, &link_status);
+    if (link_status == GL_FALSE) {
         GLint log_size = 0;
         glGetProgramiv(graphics_renderer_program, GL_INFO_LOG_LENGTH, &log_size);
 
@@ -238,9 +278,9 @@ void molang_graphics_renderer_initialize(int width, int height)
      * initialization because it is quite computationally expensive.  */
     glValidateProgram(graphics_renderer_program);
 
-    success = GL_FALSE;
-    glGetProgramiv(graphics_renderer_program, GL_VALIDATE_STATUS, &success);
-    if (success == GL_FALSE) {
+    GLint validate_status = GL_FALSE;
+    glGetProgramiv(graphics_renderer_program, GL_VALIDATE_STATUS, &validate_status);
+    if (validate_status == GL_FALSE) {
         GLint log_size = 0;
         glGetProgramiv(graphics_renderer_program, GL_INFO_LOG_LENGTH, &log_size);
 
@@ -255,6 +295,79 @@ void molang_graphics_renderer_initialize(int width, int height)
         L("unable to link program: %s\r\n", error_log);
         abort();
     }
+
+#ifndef NDEBUG
+    GLint attached_shaders;
+    glGetProgramiv(graphics_renderer_program, GL_ATTACHED_SHADERS, &attached_shaders);
+    MOLANG_GRAPHICS_LIBRARY_ERROR();
+
+    GLint active_attrs;
+    glGetProgramiv(graphics_renderer_program, GL_ACTIVE_ATTRIBUTES, &active_attrs);
+    MOLANG_GRAPHICS_LIBRARY_ERROR();
+
+    GLint active_uniforms;
+    glGetProgramiv(graphics_renderer_program, GL_ACTIVE_UNIFORMS, &active_uniforms);
+    MOLANG_GRAPHICS_LIBRARY_ERROR();
+
+    L("OpenGL ES program: %d link_status=%d validate_status=%d attached_shaders=%d active_attrs=%d active_uniforms=%d\r\n",
+        graphics_renderer_program, link_status, validate_status, attached_shaders, active_attrs, active_uniforms);
+
+    for (int i = 0; i < active_attrs; i++) {
+#define GRAPHICS_RENDERER_PROGRAM_ACTIVE_ATTRIBUTES_NAME_MAX_LENGTH   256
+        GLchar attr_name[GRAPHICS_RENDERER_PROGRAM_ACTIVE_ATTRIBUTES_NAME_MAX_LENGTH];
+        GLsizei attr_name_len;
+        GLint attr_size;
+        GLenum attr_type;
+        glGetActiveAttrib(graphics_renderer_program
+                         ,i
+                         ,GRAPHICS_RENDERER_PROGRAM_ACTIVE_ATTRIBUTES_NAME_MAX_LENGTH
+                         ,&attr_name_len
+                         ,&attr_size
+                         ,&attr_type
+                         ,attr_name);
+
+        if (attr_size > 1) {
+            for (int j = 0; j < attr_size; j++) {
+                char *attr_array_name;
+                asprintf(&attr_array_name, "%s[%d]", attr_name, j);
+                int attr_loc = glGetAttribLocation(graphics_renderer_program, attr_array_name);
+                L("\tattribute: %d name=%s type=%s location=%d\r\n", i, attr_array_name, gl_type_to_str(attr_type), attr_loc);
+                free(attr_array_name);
+            }
+        } else {
+            int attr_loc = glGetAttribLocation(graphics_renderer_program, attr_name);
+            L("\tattribute: %d name=%s type=%s location=%d\r\n", i, attr_name, gl_type_to_str(attr_type), attr_loc);
+        }
+    }
+
+    for (int i = 0; i < active_uniforms; i++) {
+#define GRAPHICS_RENDERER_PROGRAM_ACTIVE_UNIFORMS_NAME_MAX_LENGTH   256
+        GLchar uniform_name[GRAPHICS_RENDERER_PROGRAM_ACTIVE_UNIFORMS_NAME_MAX_LENGTH];
+        GLsizei uniform_name_len;
+        GLint uniform_size;
+        GLenum uniform_type;
+        glGetActiveUniform(graphics_renderer_program
+                          ,i
+                          ,GRAPHICS_RENDERER_PROGRAM_ACTIVE_UNIFORMS_NAME_MAX_LENGTH
+                          ,&uniform_name_len
+                          ,&uniform_size
+                          ,&uniform_type
+                          ,uniform_name);
+
+        if (uniform_size > 1) {
+            for (int j = 0; j < uniform_size; j++) {
+                char *uniform_array_name;
+                asprintf(&uniform_array_name, "%s[%d]", uniform_name, j);
+                int uniform_loc = glGetUniformLocation(graphics_renderer_program, uniform_array_name);
+                L("\tuniform: %d name=%s type=%s location=%d\r\n", i, uniform_array_name, gl_type_to_str(uniform_type), uniform_loc);
+                free(uniform_array_name);
+            }
+        } else {
+            int uniform_loc = glGetUniformLocation(graphics_renderer_program, uniform_name);
+            L("\tuniform: %d name=%s type=%s location=%d\r\n", i, uniform_name, gl_type_to_str(uniform_type), uniform_loc);
+        }
+    }
+#endif
 }
 
 void molang_graphics_renderer_terminate()
@@ -286,6 +399,7 @@ void molang_graphics_renderer_draw()
         if (object != NULL) {
             glBindVertexArray(object->vertex_array);
             MOLANG_GRAPHICS_LIBRARY_ERROR();
+
             glDrawArrays(GL_TRIANGLES, 0, 3);
             MOLANG_GRAPHICS_LIBRARY_ERROR();
         }
@@ -304,35 +418,43 @@ uint32_t molang_graphics_renderer_object_create(uint32_t image_handler)
             }
 
             const GLfloat vertices[] = {
-                0, 0, 0,
-                0, 1, 0,
-                1, 1, 0,
-                1, 0, 0,
+                 0.0,  0.5, 0.0,
+                 0.5, -0.5, 0.0,
+                -0.5, -0.5, 0.0,
             };
+
             glGenBuffers(1, &(object->vertex_buffer));
             MOLANG_GRAPHICS_LIBRARY_ERROR();
             glBindBuffer(GL_ARRAY_BUFFER, object->vertex_buffer);
             MOLANG_GRAPHICS_LIBRARY_ERROR();
             glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
             MOLANG_GRAPHICS_LIBRARY_ERROR();
-            glBindBuffer(GL_ARRAY_BUFFER, 0);
+
+            glGetBufferParameteriv(GL_ARRAY_BUFFER, GL_BUFFER_SIZE, &(object->vertex_buffer_size));
 
             glGenVertexArrays(1, &(object->vertex_array));
             MOLANG_GRAPHICS_LIBRARY_ERROR();
             glBindVertexArray(object->vertex_array);
             MOLANG_GRAPHICS_LIBRARY_ERROR();
-#define GRAPHICS_RENDERER_VERTEX_ATTRIB 0
-            glEnableVertexAttribArray(GRAPHICS_RENDERER_VERTEX_ATTRIB);
+
+#define GRAPHICS_RENDERER_VERTEX_ATTRIB_POSITION_LOC 0
+            glEnableVertexAttribArray(GRAPHICS_RENDERER_VERTEX_ATTRIB_POSITION_LOC);
             MOLANG_GRAPHICS_LIBRARY_ERROR();
-            glBindBuffer(GL_ARRAY_BUFFER, object->vertex_buffer);
+            glVertexAttribPointer(GRAPHICS_RENDERER_VERTEX_ATTRIB_POSITION_LOC, 3, GL_FLOAT, GL_FALSE, 0, NULL);
             MOLANG_GRAPHICS_LIBRARY_ERROR();
-            glVertexAttribPointer(GRAPHICS_RENDERER_VERTEX_ATTRIB, 3, GL_FLOAT, GL_FALSE, 0, NULL);
-            MOLANG_GRAPHICS_LIBRARY_ERROR();
+
             glBindVertexArray(0);
+            glBindBuffer(GL_ARRAY_BUFFER, 0);
 
             object->texture_buffer = image_handler;
 
             graphics_renderer_objects[i] = object;
+            L("load object address=0x%p vertex_buffer=%d vertex_buffer_size=%db vertex_array=%d texture_buffer=%d\r\n"
+                ,(void *) object
+                ,object->vertex_buffer
+                ,object->vertex_buffer_size
+                ,object->vertex_array
+                ,object->texture_buffer);
 
             return i;
         }
@@ -352,11 +474,4 @@ void molang_graphics_renderer_object_destroy(uint32_t object_handler)
 
     free(object);
     graphics_renderer_objects[object_handler] = NULL;
-}
-
-void molang_graphics_renderer_object_position(uint32_t object_handler, float x, float y)
-{
-    graphics_renderer_object_t *object = graphics_renderer_objects[object_handler];
-    object->position[0] = x;
-    object->position[1] = y;
 }
