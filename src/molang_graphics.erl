@@ -8,6 +8,8 @@
 -export([create_image/1, destroy_image/1]).
 -export([create_object/1, destroy_object/1]).
 
+-export([set_object_position/3, set_object_velocity/3, set_object_direction/3]).
+
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
   code_change/3]).
@@ -43,6 +45,13 @@ create_object(Image) ->
   gen_server:call(?SERVER, {create_object, Image}).
 destroy_object(Object) ->
   gen_server:cast(?SERVER, {destroy_object, Object}).
+
+set_object_position(Object, X, Y) ->
+  gen_server:cast(?SERVER, {set_object_position, Object, X, Y}).
+set_object_velocity(Object, X, Y) ->
+  gen_server:cast(?SERVER, {set_object_velocity, Object, X, Y}).
+set_object_direction(Object, X, Y) ->
+  gen_server:cast(?SERVER, {set_object_direction, Object, X, Y}).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -86,6 +95,16 @@ handle_cast({destroy_image, Image}, State = #molang_graphics_state{port = Port})
   {noreply, State};
 handle_cast({destroy_object, Object}, State = #molang_graphics_state{port = Port}) ->
   erlang:port_command(Port, [erlang:term_to_binary(16#11), erlang:term_to_binary(Object)]),
+  {noreply, State};
+
+handle_cast({set_object_position, Object, X, Y}, State = #molang_graphics_state{port = Port}) ->
+  erlang:port_command(Port, [erlang:term_to_binary(16#12), erlang:term_to_binary(Object), erlang:term_to_binary(X), erlang:term_to_binary(Y)]),
+  {noreply, State};
+handle_cast({set_object_velocity, Object, X, Y}, State = #molang_graphics_state{port = Port}) ->
+  erlang:port_command(Port, [erlang:term_to_binary(16#13), erlang:term_to_binary(Object), erlang:term_to_binary(X), erlang:term_to_binary(Y)]),
+  {noreply, State};
+handle_cast({set_object_direction, Object, X, Y}, State = #molang_graphics_state{port = Port}) ->
+  erlang:port_command(Port, [erlang:term_to_binary(16#14), erlang:term_to_binary(Object), erlang:term_to_binary(X), erlang:term_to_binary(Y)]),
   {noreply, State}.
 
 %% @private

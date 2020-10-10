@@ -107,19 +107,25 @@ extern void     molang_audio_listener_orientation   (float x, float y);
 #define GRAPHICS_ERL_DRV_IMAGE_CREATE_FN    0x00
 #define GRAPHICS_ERL_DRV_IMAGE_DESTROY_FN   0x01
 
-#define GRAPHICS_ERL_DRV_OBJECT_CREATE_FN   0x10
-#define GRAPHICS_ERL_DRV_OBJECT_DESTROY_FN  0x11
-#define GRAPHICS_ERL_DRV_OBJECT_POSITION_FN 0x12
+#define GRAPHICS_ERL_DRV_OBJECT_CREATE_FN       0x10
+#define GRAPHICS_ERL_DRV_OBJECT_DESTROY_FN      0x11
+#define GRAPHICS_ERL_DRV_OBJECT_POSITION_FN     0x12
+#define GRAPHICS_ERL_DRV_OBJECT_VELOCITY_FN     0x13
+#define GRAPHICS_ERL_DRV_OBJECT_DIRECTION_FN    0x14
+
+extern void     molang_graphics_initialize (int width, int height);
+extern void     molang_graphics_terminate  (void);
 
 extern uint32_t molang_graphics_image_create    (const char *file_name);
 extern void     molang_graphics_image_destroy   (uint32_t image_handler);
 
-extern void     molang_graphics_renderer_initialize (int width, int height);
-extern void     molang_graphics_renderer_terminate  (void);
+extern uint32_t molang_graphics_object_create       (uint32_t image_handler);
+extern void     molang_graphics_object_destroy      (uint32_t object_handler);
+extern void     molang_graphics_object_position     (uint32_t object_handler, float x, float y);
+extern void     molang_graphics_object_velocity     (uint32_t object_handler, float x, float y);
+extern void     molang_graphics_object_direction    (uint32_t object_handler, float x, float y);
 
-extern void     molang_graphics_renderer_draw   (void);
-
-extern uint32_t molang_graphics_renderer_object_create   (uint32_t image_handler);
-extern void     molang_graphics_renderer_object_destroy  (uint32_t object_handler);
+extern void     molang_graphics_renderer_append (uint32_t object_handler);
+extern void     molang_graphics_renderer_flush  (void);
 
 #endif

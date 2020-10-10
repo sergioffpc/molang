@@ -6,12 +6,18 @@
 
 #include <EGL/egl.h>
 #include <X11/Xlib.h>
+#include <X11/keysymdef.h>
 
 #include "molang.h"
 
+typedef enum {
+    GRAPHICS_STATE_RUNNING,
+    GRAPHICS_STATE_STOPPED
+} graphics_state_e;
+
 typedef struct {
-    ErlDrvPort   port;
-    bool         is_running;
+    ErlDrvPort          port;
+    graphics_state_e    state;
 } graphics_erl_drv_data_t;
 
 static void *graphics_erl_drv_loop(void *arg)
@@ -161,17 +167,12 @@ static void *graphics_erl_drv_loop(void *arg)
     L("OpenGL ES shading language version: %s\r\n", glGetString(GL_SHADING_LANGUAGE_VERSION));
     L("OpenGL ES extensions: %s\r\n", glGetString(GL_EXTENSIONS));
 
-    molang_graphics_renderer_initialize(width, height);
+    molang_graphics_initialize(width, height);
 
     uint64_t frame_count = 0;
 
-    data->is_running = true;
-    while (data->is_running) {
-#ifndef NDEBUG
-        struct timespec t0;
-        clock_gettime(CLOCK_MONOTONIC, &t0);
-#endif
-
+    data->state = GRAPHICS_STATE_RUNNING;
+    while (data->state != GRAPHICS_STATE_STOPPED) {
         while (XPending(x11_display)) {
             XEvent event;
             XNextEvent(x11_display, &event);
@@ -189,33 +190,33 @@ static void *graphics_erl_drv_loop(void *arg)
                 break;
             }
         }
-
-        molang_graphics_renderer_draw();
-
-        eglSwapBuffers(egl_display, egl_surface);
-
 #ifndef NDEBUG
-    struct timespec t1;
-    clock_gettime(CLOCK_MONOTONIC, &t1);
-    uint64_t frame_delta = ((t1.tv_sec - t0.tv_sec) * 1000000000 + (t1.tv_nsec - t0.tv_nsec)) / 1000000;
-
-    char *str = NULL;
-    if (asprintf(&str, "frame:%ld|time:%ldms", frame_count, frame_delta) != -1) {
-        XGCValues gc_values = {
-            .foreground = 0x22ff00,
-        };
-
-        GC gc = XCreateGC(x11_display, x11_window, GCForeground, &gc_values);
-        XDrawString(x11_display, x11_window, gc, 10, 20, str, strlen(str));
-
-        free(str);
-    }
+        struct timespec t0;
+        clock_gettime(CLOCK_MONOTONIC, &t0);
 #endif
+        molang_graphics_renderer_flush();
+        eglSwapBuffers(egl_display, egl_surface);
+#ifndef NDEBUG
+        struct timespec t1;
+        clock_gettime(CLOCK_MONOTONIC, &t1);
+        uint64_t frame_delta = ((t1.tv_sec - t0.tv_sec) * 1000000000 + (t1.tv_nsec - t0.tv_nsec)) / 1000000;
 
+        char *str = NULL;
+        if (asprintf(&str, "frame:%ld|time:%ldms", frame_count, frame_delta) != -1) {
+            XGCValues gc_values = {
+                .foreground = 0x22ff00,
+            };
+
+            GC gc = XCreateGC(x11_display, x11_window, GCForeground, &gc_values);
+            XDrawString(x11_display, x11_window, gc, 10, 20, str, strlen(str));
+
+            free(str);
+        }
+#endif
         frame_count++;
     }
 
-    molang_graphics_renderer_terminate();
+    molang_graphics_terminate();
 
     eglMakeCurrent(egl_display, egl_surface, egl_surface, EGL_NO_CONTEXT);
 
@@ -259,7 +260,7 @@ static ErlDrvData graphics_erl_drv_start(ErlDrvPort port, char *buffer __attribu
 
 static void graphics_erl_drv_stop(ErlDrvData data)
 {
-    ((graphics_erl_drv_data_t *) data)->is_running = false;
+    ((graphics_erl_drv_data_t *) data)->state = GRAPHICS_STATE_STOPPED;
 
     driver_free((char *) data);
 }
@@ -304,7 +305,7 @@ static void graphics_erl_drv_output(ErlDrvData data, char *buffer, ErlDrvSizeT l
             ei_decode_version(buffer, &index, NULL);
             ei_decode_ulonglong(buffer, &index, &image_handler);
 
-            uint32_t object_handler = molang_graphics_renderer_object_create(image_handler);
+            uint32_t object_handler = molang_graphics_object_create(image_handler);
 
             ei_x_buff x;
             ei_x_new_with_version(&x);
@@ -321,7 +322,58 @@ static void graphics_erl_drv_output(ErlDrvData data, char *buffer, ErlDrvSizeT l
             ei_decode_version(buffer, &index, NULL);
             ei_decode_ulonglong(buffer, &index, &object_handler);
 
-            molang_graphics_renderer_object_destroy(object_handler);
+            molang_graphics_object_destroy(object_handler);
+        }
+            break;
+        case GRAPHICS_ERL_DRV_OBJECT_POSITION_FN:
+        {
+            EI_ULONGLONG object_handler = 0;
+            ei_decode_version(buffer, &index, NULL);
+            ei_decode_ulonglong(buffer, &index, &object_handler);
+
+            double x = 0;
+            ei_decode_version(buffer, &index, NULL);
+            ei_decode_double(buffer, &index, &x);
+
+            double y = 0;
+            ei_decode_version(buffer, &index, NULL);
+            ei_decode_double(buffer, &index, &y);
+
+            molang_graphics_object_position(object_handler, x, y);
+        }
+            break;
+        case GRAPHICS_ERL_DRV_OBJECT_VELOCITY_FN:
+        {
+            EI_ULONGLONG object_handler = 0;
+            ei_decode_version(buffer, &index, NULL);
+            ei_decode_ulonglong(buffer, &index, &object_handler);
+
+            double x = 0;
+            ei_decode_version(buffer, &index, NULL);
+            ei_decode_double(buffer, &index, &x);
+
+            double y = 0;
+            ei_decode_version(buffer, &index, NULL);
+            ei_decode_double(buffer, &index, &y);
+
+            molang_graphics_object_velocity(object_handler, x, y);
+        }
+            break;
+        case GRAPHICS_ERL_DRV_OBJECT_DIRECTION_FN:
+        {
+            EI_ULONGLONG object_handler = 0;
+            ei_decode_version(buffer, &index, NULL);
+            ei_decode_ulonglong(buffer, &index, &object_handler);
+
+            double x = 0;
+            ei_decode_version(buffer, &index, NULL);
+            ei_decode_double(buffer, &index, &x);
+
+            double y = 0;
+            ei_decode_version(buffer, &index, NULL);
+            ei_decode_double(buffer, &index, &y);
+
+            molang_graphics_object_direction(object_handler, x, y);
         }
             break;
         default:
