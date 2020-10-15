@@ -1,9 +1,14 @@
 #include <errno.h>
 #include <glob.h>
+#include <stddef.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
 #include <png.h>
+
+#include <GLES3/gl31.h>
 
 #include "molang.h"
 
@@ -661,6 +666,27 @@ void molang_graphics_object_destroy(uint32_t object_handler)
 
     free(object);
     graphics_objects[object_handler] = NULL;
+}
+
+void molang_graphics_object_position(uint32_t object_handler, float x, float y)
+{
+    (void) object_handler;
+    (void) x;
+    (void) y;
+}
+
+void molang_graphics_object_velocity(uint32_t object_handler, float x, float y)
+{
+    (void) object_handler;
+    (void) x;
+    (void) y;
+}
+
+void molang_graphics_object_direction(uint32_t object_handler, float x, float y)
+{
+    (void) object_handler;
+    (void) x;
+    (void) y;
 }
 
 void molang_graphics_renderer_append(uint32_t object_handler)

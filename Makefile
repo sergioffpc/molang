@@ -28,11 +28,13 @@ all: molang_audio.so molang_graphics.so
 	$(ERLC) $(ERLCFLAGS) -o $(BUILD_DIR)/ $(ERL_SRC_DIR)/*.erl
 	@cp $(ERL_SRC_DIR)/molang.app.src $(BUILD_DIR)/molang.app
 
-molang_audio.so: $(C_SRC_DIR)/molang.h $(C_SRC_DIR)/molang_audio.c $(C_SRC_DIR)/molang_audio_erl_drv.c
+molang_audio.so: $(C_SRC_DIR)/molang.h $(C_SRC_DIR)/molang_audio.h $(C_SRC_DIR)/molang_audio.c \
+	$(C_SRC_DIR)/molang_audio_erl_drv.c
 	$(CC) $(CFLAGS) $(CPPFLAGS) -Wl,--whole-archive -lei -Wl,--no-whole-archive -o $(BUILD_DIR)/$@ $^ $(LDFLAGS) \
 		$(LDLIBS) $(shell pkg-config --libs openal flac)
 
-molang_graphics.so: $(C_SRC_DIR)/molang.h $(C_SRC_DIR)/molang_graphics.c $(C_SRC_DIR)/molang_graphics_erl_drv.c
+molang_graphics.so: $(C_SRC_DIR)/molang.h $(C_SRC_DIR)/molang_graphics.h $(C_SRC_DIR)/molang_graphics.c \
+	$(C_SRC_DIR)/molang_graphics_erl_drv.c
 	$(CC) $(CFLAGS) $(CPPFLAGS) -Wl,--whole-archive -lei -Wl,--no-whole-archive -o $(BUILD_DIR)/$@ $^ $(LDFLAGS) \
 		$(LDLIBS) $(shell pkg-config --libs egl glesv2 libpng x11)
 

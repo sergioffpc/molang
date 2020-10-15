@@ -1,7 +1,9 @@
+#include <stddef.h>
+#include <stdint.h>
+#include <stdlib.h>
+
 #include <ei.h>
 #include <erl_driver.h>
-#include <errno.h>
-#include <string.h>
 
 #include <AL/alc.h>
 
@@ -46,15 +48,6 @@ static ErlDrvData audio_erl_drv_start(ErlDrvPort port, char *buffer __attribute_
     L("OpenAL default device specifier: %s\r\n", alcGetString(alc_device, ALC_DEFAULT_DEVICE_SPECIFIER));
     L("OpenAL device specifier: %s\r\n", alcGetString(alc_device, ALC_DEVICE_SPECIFIER));
     L("OpenAL extensions: %s\r\n", alcGetString(alc_device, ALC_EXTENSIONS));
-
-    /*
-     * When an OpenAL error occurs, the error state is set and will not be changed until the error state
-     * is retrieved using alGetError.  Whenever alGetError is called, the error state is cleared and the
-     * last state (the current state when the call was made) is returned.  To isolate error detection to
-     * a specific portion of code, alGetError should be called before the isolated section to clear the
-     * current error state.
-     */
-    MOLANG_AUDIO_LIBRARY_ERROR();
 
     return (ErlDrvData) data;
 }

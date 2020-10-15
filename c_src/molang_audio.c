@@ -1,7 +1,11 @@
-#include <endian.h>
 #include <errno.h>
+#include <stdbool.h>
+#include <stddef.h>
+#include <stdint.h>
+#include <stdlib.h>
 #include <string.h>
 
+#include <AL/al.h>
 #include <FLAC/stream_decoder.h>
 
 #include "molang.h"
@@ -67,7 +71,7 @@ static void metadata_callback(const FLAC__StreamDecoder *decoder __attribute__((
     }
 }
 
-void error_callback(const FLAC__StreamDecoder *decoder __attribute__((unused)), FLAC__StreamDecoderErrorStatus status, void *client_data __attribute__((unused)))
+static void error_callback(const FLAC__StreamDecoder *decoder __attribute__((unused)), FLAC__StreamDecoderErrorStatus status, void *client_data __attribute__((unused)))
 {
     (void) status;
     L("error decoding FLAC audio file: %s\r\n", FLAC__StreamDecoderErrorStatusString[status]);

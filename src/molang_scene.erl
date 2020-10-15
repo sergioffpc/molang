@@ -5,6 +5,8 @@
 %% API
 -export([start_link/0]).
 
+-export([spatial_indexing/0]).
+
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
   code_change/3]).
@@ -22,6 +24,9 @@
   {ok, Pid :: pid()} | ignore | {error, Reason :: term()}).
 start_link() ->
   gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
+
+spatial_indexing() ->
+  gen_server:cast(?SERVER, spatial_indexing).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -45,9 +50,8 @@ init([]) ->
   {noreply, NewState :: #molang_scene_state{}, timeout() | hibernate} |
   {stop, Reason :: term(), Reply :: term(), NewState :: #molang_scene_state{}} |
   {stop, Reason :: term(), NewState :: #molang_scene_state{}}).
-handle_call(load, _From, State = #molang_scene_state{}) ->
-  molang_graphics:create_object(0),
-  {reply, ok, State}.
+handle_call(spatial_indexing, _From, State = #molang_scene_state{}) ->
+  {reply, [], State}.
 
 %% @private
 %% @doc Handling cast messages

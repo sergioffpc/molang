@@ -1,8 +1,16 @@
+#include <errno.h>
+#include <pthread.h>
+#include <stddef.h>
+#include <stdbool.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <time.h>
+#include <unistd.h>
+
 #include <ei.h>
 #include <erl_driver.h>
-#include <pthread.h>
-#include <stdbool.h>
-#include <string.h>
 
 #include <EGL/egl.h>
 #include <X11/Xlib.h>
@@ -10,19 +18,156 @@
 
 #include "molang.h"
 
-typedef enum {
-    GRAPHICS_STATE_RUNNING,
-    GRAPHICS_STATE_STOPPED
-} graphics_state_e;
-
 typedef struct {
-    ErlDrvPort          port;
-    graphics_state_e    state;
+    ErlDrvPort  port;
+
+    pthread_t   thread;
 } graphics_erl_drv_data_t;
 
-static void *graphics_erl_drv_loop(void *arg)
+typedef struct {
+    bool    is_running;
+
+    Display *x11_display;
+    Window   x11_window;
+
+    EGLDisplay  egl_display;
+    EGLSurface  egl_surface;
+
+    ei_cnode    ei_connection;
+    int         ei_socket;
+} graphics_thr_data_t;
+
+static void graphics_erl_connect(graphics_thr_data_t *data)
 {
-    graphics_erl_drv_data_t *data = (graphics_erl_drv_data_t *) arg;
+    char hostname[EI_MAXHOSTNAMELEN + 1];
+    struct in_addr ipaddr;
+
+    gethostname(hostname, EI_MAXHOSTNAMELEN);
+
+    struct hostent *hp;
+    if ((hp = ei_gethostbyname(hostname)) == 0) {
+        L("unable to resolve hostname: %s\r\n", hostname);
+        abort();
+    }
+
+    strcpy(hostname, hp->h_name);
+    memcpy(&ipaddr.s_addr, *hp->h_addr_list, sizeof(struct in_addr));
+
+    const char *c_alivename = "molangc";
+    char c_nodename[MAXNODELEN + 1];
+    sprintf(c_nodename, "%s@%s", c_alivename, hostname);
+
+    short creation = (time(NULL) % 3) + 1;
+    if (ei_connect_xinit(&(data->ei_connection), hostname, c_alivename, c_nodename, (Erl_IpAddr) &ipaddr, NULL, creation) < 0) {
+        L("unable to create C node: %s: %s\r\n", c_nodename, strerror(erl_errno));
+        abort();
+    }
+
+    char *s_alivename = "molangs";
+    char s_nodename[MAXNODELEN + 1];
+    sprintf(s_nodename, "%s@%s", s_alivename, hostname);
+    if ((data->ei_socket = ei_connect(&(data->ei_connection), s_nodename)) < 0) {
+        L("unable to connect to Erlang node: %s: %s\r\n", s_nodename, strerror(erl_errno));
+        abort();
+    }
+
+    L("C node '%s' connected to Erlang node '%s'\r\n", c_nodename, s_nodename);
+}
+
+static void graphics_erl_disconnect(graphics_thr_data_t *data)
+{
+    ei_close_connection(data->ei_socket);
+}
+
+static void graphics_x11_evt_pending(graphics_thr_data_t *data)
+{
+    while (XPending(data->x11_display)) {
+        XEvent event;
+        XNextEvent(data->x11_display, &event);
+
+        switch (event.type) {
+            case KeyPress:
+                if (XLookupKeysym(&event.xkey, 0) == XK_Escape) {
+                    data->is_running = false;
+                }
+                break;
+            case KeyRelease:
+                break;
+            case MotionNotify:
+                break;
+            case ButtonPress:
+                break;
+            case ButtonRelease:
+                break;
+        }
+    }
+}
+
+static void graphics_thr_loop(graphics_thr_data_t *data)
+{
+    uint64_t frame_count = 0;
+
+    data->is_running = true;
+    while (data->is_running) {
+        graphics_x11_evt_pending(data);
+#ifndef NDEBUG
+        struct timespec t0;
+        clock_gettime(CLOCK_MONOTONIC, &t0);
+#endif
+        ei_x_buff result;
+        ei_x_new_with_version(&result);
+
+        ei_x_buff args;
+        ei_x_new(&args);
+
+        ei_cnode *ec = &(data->ei_connection);
+        if (ei_rpc(ec, data->ei_socket, "erlang", "halt", args.buff, args.index, &result) < 0) {
+            L("unable to call function on remote node: %s\r\n", strerror(erl_errno));
+            abort();
+        }
+
+        int index = 0;
+        int arity = 0;
+        ei_decode_version(result.buff, &index, NULL);
+        ei_decode_list_header(result.buff, &index, &arity);
+        for (int i = 0; i < arity; i++) {
+            EI_ULONGLONG object_handler;
+            ei_decode_version(result.buff, &index, NULL);
+            ei_decode_ulonglong(result.buff, &index, &object_handler);
+
+            molang_graphics_renderer_append(object_handler);
+        }
+
+        ei_x_free(&args);
+        ei_x_free(&result);
+
+        molang_graphics_renderer_flush();
+
+        eglSwapBuffers(data->egl_display, data->egl_surface);
+#ifndef NDEBUG
+        struct timespec t1;
+        clock_gettime(CLOCK_MONOTONIC, &t1);
+        uint64_t frame_delta = ((t1.tv_sec - t0.tv_sec) * 1000000000 + (t1.tv_nsec - t0.tv_nsec)) / 1000000;
+
+        char *str = NULL;
+        if (asprintf(&str, "frame:%ld|time:%ldms", frame_count, frame_delta) != -1) {
+            XGCValues gc_values = {
+                .foreground = 0x22ff00,
+            };
+
+            GC gc = XCreateGC(data->x11_display, data->x11_window, GCForeground, &gc_values);
+            XDrawString(data->x11_display, data->x11_window, gc, 10, 20, str, strlen(str));
+
+            free(str);
+        }
+#endif
+        frame_count++;
+    }
+}
+
+static void *graphics_thr_start(void *arg __attribute__((unused)))
+{
+    graphics_thr_data_t data;
 
     const char *egl_extensions = eglQueryString(EGL_NO_DISPLAY, EGL_EXTENSIONS);
     if (!egl_extensions) {
@@ -35,30 +180,28 @@ static void *graphics_erl_drv_loop(void *arg)
         abort();
     }
 
-    Display *x11_display;
     const char *x11_display_name = NULL;
-    x11_display = XOpenDisplay(x11_display_name);
-    if (x11_display == NULL) {
+    data.x11_display = XOpenDisplay(x11_display_name);
+    if (data.x11_display == NULL) {
         L("unable to open display: %s\r\n", x11_display_name);
         abort();
     }
 
-    EGLDisplay egl_display;
-    egl_display = eglGetDisplay(x11_display);
-    if (egl_display == EGL_NO_DISPLAY) {
+    data.egl_display = eglGetDisplay(data.x11_display);
+    if (data.egl_display == EGL_NO_DISPLAY) {
         L("unable to get EGL display\r\n");
         abort();
     }
 
-    if (!eglInitialize(egl_display, NULL, NULL)) {
+    if (!eglInitialize(data.egl_display, NULL, NULL)) {
         L("unable to initialize EGL\r\n");
         abort();
     }
 
-    L("EGL client API names: %s\r\n", eglQueryString(egl_display, EGL_CLIENT_APIS));
-    L("EGL vendor: %s\r\n", eglQueryString(egl_display, EGL_VENDOR));
-    L("EGL version: %s\r\n", eglQueryString(egl_display, EGL_VERSION));
-    L("EGL extensions: %s\r\n", eglQueryString(egl_display, EGL_EXTENSIONS));
+    L("EGL client API names: %s\r\n", eglQueryString(data.egl_display, EGL_CLIENT_APIS));
+    L("EGL vendor: %s\r\n", eglQueryString(data.egl_display, EGL_VENDOR));
+    L("EGL version: %s\r\n", eglQueryString(data.egl_display, EGL_VERSION));
+    L("EGL extensions: %s\r\n", eglQueryString(data.egl_display, EGL_EXTENSIONS));
 
     EGLint egl_config_attrs[] = {
         EGL_BUFFER_SIZE,        32,
@@ -75,7 +218,7 @@ static void *graphics_erl_drv_loop(void *arg)
 
     EGLConfig egl_config;
     EGLint egl_config_count;
-    if (!eglChooseConfig(egl_display, egl_config_attrs, &egl_config, 1, &egl_config_count)) {
+    if (!eglChooseConfig(data.egl_display, egl_config_attrs, &egl_config, 1, &egl_config_count)) {
         L("unable to specify required EGL attribute properties\r\n");
         abort();
     }
@@ -85,27 +228,27 @@ static void *graphics_erl_drv_loop(void *arg)
     }
 
     XVisualInfo x11_visual_info_template;
-    if (!eglGetConfigAttrib(egl_display, egl_config, EGL_NATIVE_VISUAL_ID, (EGLint*) &x11_visual_info_template.visualid)) {
+    if (!eglGetConfigAttrib(data.egl_display, egl_config, EGL_NATIVE_VISUAL_ID, (EGLint*) &x11_visual_info_template.visualid)) {
         L("unable to query configuration attributes\r\n");
         abort();
     }
 
     XVisualInfo *x11_visual_info;
     int x11_visual_info_count;
-    x11_visual_info = XGetVisualInfo(x11_display, VisualIDMask, &x11_visual_info_template, &x11_visual_info_count);
+    x11_visual_info = XGetVisualInfo(data.x11_display, VisualIDMask, &x11_visual_info_template, &x11_visual_info_count);
     if (!x11_visual_info) {
         L("no visual structures match the template\r\n");
         abort();
     }
 
     Colormap x11_colormap;
-    x11_colormap = XCreateColormap(x11_display, RootWindow(x11_display, 0), x11_visual_info->visual, AllocNone);
+    x11_colormap = XCreateColormap(data.x11_display, RootWindow(data.x11_display, 0), x11_visual_info->visual, AllocNone);
     if (x11_colormap == None) {
         L("unable to create a colormap of the specified visual type\r\n");
         abort();
     }
 
-    const Window x11_root_window = DefaultRootWindow(x11_display);
+    const Window x11_root_window = DefaultRootWindow(data.x11_display);
     const int width = 1920;
     const int height = 1080;
 
@@ -117,9 +260,8 @@ static void *graphics_erl_drv_loop(void *arg)
     int x11_window_attrs_mask = 0;
     x11_window_attrs_mask = CWEventMask | CWColormap | CWBorderPixel;
 
-    Window x11_window;
-    x11_window = XCreateWindow(x11_display, x11_root_window, 0, 0, width, height,  0, x11_visual_info->depth, InputOutput, x11_visual_info->visual, x11_window_attrs_mask, &x11_window_attrs);
-    if (!x11_window) {
+    data.x11_window = XCreateWindow(data.x11_display, x11_root_window, 0, 0, width, height,  0, x11_visual_info->depth, InputOutput, x11_visual_info->visual, x11_window_attrs_mask, &x11_window_attrs);
+    if (!data.x11_window) {
         L("unable to create X11 window\r\n");
         abort();
     }
@@ -131,13 +273,12 @@ static void *graphics_erl_drv_loop(void *arg)
         .min_height = height,
         .max_height = height,
     };
-    XSetWMNormalHints(x11_display, x11_window, &x11_window_hints);
+    XSetWMNormalHints(data.x11_display, data.x11_window, &x11_window_hints);
 
-    XMapWindow(x11_display, x11_window);
+    XMapWindow(data.x11_display, data.x11_window);
 
-    EGLSurface egl_surface;
-    egl_surface = eglCreateWindowSurface(egl_display, egl_config, x11_window, NULL);
-    if (egl_surface == EGL_NO_SURFACE) {
+    data.egl_surface = eglCreateWindowSurface(data.egl_display, egl_config, data.x11_window, NULL);
+    if (data.egl_surface == EGL_NO_SURFACE) {
         L("unable to create EGL window surface\r\n");
         abort();
     }
@@ -150,14 +291,14 @@ static void *graphics_erl_drv_loop(void *arg)
     };
 
     EGLContext egl_context;
-    egl_context = eglCreateContext(egl_display, egl_config, EGL_NO_CONTEXT, egl_context_attrs);
+    egl_context = eglCreateContext(data.egl_display, egl_config, EGL_NO_CONTEXT, egl_context_attrs);
     if (egl_context == EGL_NO_CONTEXT) {
         L("unable to create EGL rendering context\r\n");
         abort();
     }
 
-    eglMakeCurrent(egl_display, egl_surface, egl_surface, egl_context);
-    eglSwapInterval(egl_display, 1);
+    eglMakeCurrent(data.egl_display, data.egl_surface, data.egl_surface, egl_context);
+    eglSwapInterval(data.egl_display, 1);
 
     MOLANG_GRAPHICS_LIBRARY_ERROR();
 
@@ -169,63 +310,20 @@ static void *graphics_erl_drv_loop(void *arg)
 
     molang_graphics_initialize(width, height);
 
-    uint64_t frame_count = 0;
-
-    data->state = GRAPHICS_STATE_RUNNING;
-    while (data->state != GRAPHICS_STATE_STOPPED) {
-        while (XPending(x11_display)) {
-            XEvent event;
-            XNextEvent(x11_display, &event);
-
-            switch (event.type) {
-                case KeyPress:
-                break;
-                case KeyRelease:
-                break;
-                case MotionNotify:
-                break;
-                case ButtonPress:
-                break;
-                case ButtonRelease:
-                break;
-            }
-        }
-#ifndef NDEBUG
-        struct timespec t0;
-        clock_gettime(CLOCK_MONOTONIC, &t0);
-#endif
-        molang_graphics_renderer_flush();
-        eglSwapBuffers(egl_display, egl_surface);
-#ifndef NDEBUG
-        struct timespec t1;
-        clock_gettime(CLOCK_MONOTONIC, &t1);
-        uint64_t frame_delta = ((t1.tv_sec - t0.tv_sec) * 1000000000 + (t1.tv_nsec - t0.tv_nsec)) / 1000000;
-
-        char *str = NULL;
-        if (asprintf(&str, "frame:%ld|time:%ldms", frame_count, frame_delta) != -1) {
-            XGCValues gc_values = {
-                .foreground = 0x22ff00,
-            };
-
-            GC gc = XCreateGC(x11_display, x11_window, GCForeground, &gc_values);
-            XDrawString(x11_display, x11_window, gc, 10, 20, str, strlen(str));
-
-            free(str);
-        }
-#endif
-        frame_count++;
-    }
+    graphics_erl_connect(&data);
+    graphics_thr_loop(&data);
+    graphics_erl_disconnect(&data);
 
     molang_graphics_terminate();
 
-    eglMakeCurrent(egl_display, egl_surface, egl_surface, EGL_NO_CONTEXT);
+    eglMakeCurrent(data.egl_display, data.egl_surface, data.egl_surface, EGL_NO_CONTEXT);
 
-    eglDestroySurface(egl_display, egl_surface);
-    eglDestroyContext(egl_display, egl_context);
-    eglTerminate(egl_display);
+    eglDestroySurface(data.egl_display, data.egl_surface);
+    eglDestroyContext(data.egl_display, egl_context);
+    eglTerminate(data.egl_display);
 
-    XDestroyWindow(x11_display, x11_window);
-    XCloseDisplay(x11_display);
+    XDestroyWindow(data.x11_display, data.x11_window);
+    XCloseDisplay(data.x11_display);
 
     return 0;
 }
@@ -242,16 +340,15 @@ static ErlDrvData graphics_erl_drv_start(ErlDrvPort port, char *buffer __attribu
     }
     data->port = port;
 
-    pthread_t thread;
-    switch (pthread_create(&thread, NULL, graphics_erl_drv_loop, data)) {
+    switch (pthread_create(&(data->thread), NULL, graphics_thr_start, NULL)) {
         case EAGAIN:
-            L("insufficient resources");
+            L("insufficient resources\r\n");
             abort();
         case EINVAL:
-            L("invalid settings");
+            L("invalid settings\r\n");
             abort();
         case EPERM:
-            L("no permission");
+            L("no permission\r\n");
             abort();
     }
 
@@ -260,8 +357,6 @@ static ErlDrvData graphics_erl_drv_start(ErlDrvPort port, char *buffer __attribu
 
 static void graphics_erl_drv_stop(ErlDrvData data)
 {
-    ((graphics_erl_drv_data_t *) data)->state = GRAPHICS_STATE_STOPPED;
-
     driver_free((char *) data);
 }
 
